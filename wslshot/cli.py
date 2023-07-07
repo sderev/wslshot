@@ -152,7 +152,8 @@ def get_screenshots(source: str, count: int) -> Tuple[Path]:
                 f" {source}."
             )
     except ValueError as error:
-        print(f"An error occurred while fetching the screenshot(s):\n{error}")
+        click.echo(f"{click.style('An error occurred while fetching the screenshot(s).',fg='red')}")
+        click.echo(f"{error}\n")
         sys.exit(1)
 
     return tuple(screenshots)
