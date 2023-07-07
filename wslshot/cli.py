@@ -137,19 +137,23 @@ def get_screenshots(source: str, count: int) -> Tuple[Path]:
     - The screenshot(s)'s path.
     """
     # Get the most recent screenshot(s) from the source directory.
-    screenshots = sorted(
-        Path(source).glob("*.png"), key=os.path.getmtime, reverse=True
-    )[:count]
+    try:
+        screenshots = sorted(
+            Path(source).glob("*.png"), key=os.path.getmtime, reverse=True
+        )[:count]
 
-    if len(screenshots) == 0:
-        click.echo(f"No screenshots found in the source directory: {source}.")
+        if len(screenshots) == 0:
+            click.echo(f"No screenshots found in the source directory: {source}.")
+            sys.exit(1)
+
+        if len(screenshots) < count:
+            raise ValueError(
+                f"Only {len(screenshots)} screenshot(s) found in the source directory:"
+                f" {source}."
+            )
+    except ValueError as error:
+        print(f"An error occurred while fetching the screenshot(s):\n{error}")
         sys.exit(1)
-
-    if len(screenshots) < count:
-        raise ValueError(
-            f"Only {len(screenshots)} screenshot(s) found in the source directory:"
-            f" {source}."
-        )
 
     return tuple(screenshots)
 
