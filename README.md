@@ -132,10 +132,18 @@ This will fetch the most recent screenshots from the source directory. If this c
 **You can also choose a specific number of screenshots**:
 
 ```bash
+wslshot -n 3
+```
+
+This will fetch the three most recent screenshots.
+
+**These are all the possible options**:
+
+```bash
 wslshot [--source /custom/source] [--destination /custom/destination] [--count 3] [--output HTML]
 ```
 
-This will fetch the three most recent screenshots from the source directory and copy them to the destination directory. You can specify a custom source or destination directory for this operation. You can also specify the number of recent screenshots to fetch (defaults to 1) and choose the output format for the operation, which overrides the default set in `config`.
+You can access the help message with `wslshot --help`.
 
 ## Integration in Vim
 
