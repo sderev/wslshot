@@ -2,6 +2,8 @@
 
 `wslshot` is a CLI tool that fetches the most recent screenshot(s) from a shared directory with a Windows host, then copies it to a specified directory in a Linux VM.
 
+![demo_0](https://github.com/sderev/wslshot/assets/24412384/656b0595-0c27-41fa-966a-d6ca39ec410a)
+
 <!-- TOC -->
 ## Table of Contents
 
