@@ -166,7 +166,6 @@ def copy_screenshots(screenshots: Tuple[Path], destination: str) -> Tuple[Path]:
     """
     copied_screenshots = ()
 
-    print(screenshots)
     for idx, screenshot in enumerate(screenshots):
         new_screenshot_name = rename_screenshot(idx)
         new_screenshot_path = Path(destination) / new_screenshot_name
