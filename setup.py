@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 
-VERSION = "0.0.0"
+VERSION = "0.0.2"
 
 
 def read_requirements():
@@ -32,6 +32,7 @@ setup(
     install_requires=read_requirements(),
     entry_points={
         "console_scripts": [
+            "wslshot = wslshot.cli:wslshot",
         ]
     },
     python_requires=">=3.8",
