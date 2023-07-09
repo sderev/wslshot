@@ -11,7 +11,7 @@ Features:
 - Customize the source directory using '--source'.
 - Customize the destination directory using '--destination'.
 - Choose your preferred output format (Markdown, HTML, or raw path) with the '--output' option.
-- Configure default settings with the 'config' subcommand.
+- Configure default settings with the 'configure' subcommand.
 
 For detailed usage instructions, use 'wslshot --help' or 'wslshot [command] --help'.
 """
