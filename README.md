@@ -99,7 +99,7 @@ Remember to consult your VM provider's documentation for specific instructions o
 Before using `wslshot`, you may want to configure it to suit your needs. You can do this using the `config` command:
 
 ```bash
-wslshot config --source /path/to/source --auto-stage-enabled True --output-format HTML
+wslshot configure --source /path/to/source --auto-stage-enabled True --output-format HTML
 ```
 
 This command allows you to set various options:
