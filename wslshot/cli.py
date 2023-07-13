@@ -107,7 +107,7 @@ def wslshot_cli(source, destination, count, output_format):
 
     if output_format.casefold() not in ("markdown", "html", "plain_text"):
         print(f"Invalid output format: {output_format}")
-        print("Valid options are: markdown, HTML, plain_text")
+        print("Valid options are: markdown, html, plain_text")
         sys.exit(1)
 
     # Copy the screenshot(s) to the destination directory.
@@ -115,7 +115,9 @@ def wslshot_cli(source, destination, count, output_format):
     copied_screenshots = copy_screenshots(source_screenshots, destination)
 
     # Automatically stage the screenshot(s) if the destination is a git repo.
-    if is_git_repo():
+    # But only if auto_stage is enabled in the config.
+    print(f"{config['auto_stage_enabled']=}")
+    if is_git_repo() and bool(config["auto_stage_enabled"]):
         stage_screenshots(copied_screenshots)
         copied_screenshots = format_screenshots_path_for_git(copied_screenshots)
 
@@ -152,7 +154,9 @@ def get_screenshots(source: str, count: int) -> Tuple[Path]:
                 f" {source}."
             )
     except ValueError as error:
-        click.echo(f"{click.style('An error occurred while fetching the screenshot(s).',fg='red')}")
+        click.echo(
+            f"{click.style('An error occurred while fetching the screenshot(s).',fg='red')}"
+        )
         click.echo(f"{error}\n")
         sys.exit(1)
 
@@ -188,8 +192,9 @@ def rename_screenshot(idx) -> str:
 
     - The new screenshot name.
     """
+    # Rename screenshot with ISO 8601 date and time, and append the index.
     return (
-        f"screenshot_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{idx}.png"
+        f"screenshot_{datetime.datetime.now().isoformat(timespec='seconds')}_{idx}.png"
     )
 
 
@@ -206,7 +211,7 @@ def stage_screenshots(screenshots: Tuple[Path]) -> None:
         try:
             subprocess.run(["git", "add", str(screenshot)], check=True)
         except subprocess.CalledProcessError:
-            print(f"Failed to stage screenshot '{screenshot}'.")
+            click.echo(f"Failed to stage screenshot '{screenshot}'.")
 
 
 def format_screenshots_path_for_git(screenshots: Tuple[Path]) -> Tuple[Path]:
@@ -236,16 +241,21 @@ def print_formatted_path(output_format: str, screenshots: Tuple[Path]) -> None:
     - screenshots: The screenshot(s).
     """
     for screenshot in screenshots:
-        rel_screenshot = f"/{screenshot}"
+        # Adding a '/' to the screenshot path if the destination is a git repo.
+        # This is because the screenshot path is relative to the git repo's.
+        if is_git_repo():
+            screenshot_path = f"/{screenshot}"
+        else:
+            screenshot_path = str(screenshot)  # This is an absolute path.
 
         if output_format == "markdown":
-            print(f"![{screenshot.name}]({rel_screenshot})")
+            print(f"![{screenshot.name}]({screenshot_path})")
 
         elif output_format == "html":
-            print(f'<img src="{rel_screenshot}" alt="{screenshot.name}">')
+            print(f'<img src="{screenshot_path}" alt="{screenshot.name}">')
 
         elif output_format == "plain_text":
-            print(rel_screenshot)
+            print(screenshot_path)
 
         else:
             print(f"Invalid output format: {output_format}")
@@ -406,9 +416,6 @@ def get_destination() -> Path:
     if config["default_destination"]:
         return Path(config["default_destination"])
 
-    # if default_destination:
-    #     return Path(default_destination)
-
     return Path.cwd()
 
 
@@ -491,13 +498,14 @@ def set_default_output_format(output_format: str) -> None:
     Args:
         output_format: The default output format.
     """
-    if output_format not in ["markdown", "HTML", "plain_text"]:
+    if output_format.casefold() not in ["markdown", "html", "plain_text"]:
         click.echo(f"Invalid output format: {output_format}")
+        click.echo("Valid options are: markdown, html, plain_text")
         sys.exit(1)
 
     config_file_path = get_config_file_path()
     config = read_config(config_file_path)
-    config["default_output_format"] = output_format
+    config["default_output_format"] = output_format.casefold()
 
     with open(config_file_path, "w", encoding="UTF-8") as file:
         json.dump(config, file)
@@ -515,6 +523,7 @@ def set_default_output_format(output_format: str) -> None:
 @click.option(
     "--auto-stage-enabled",
     "-a",
+    type=bool,
     help=(
         "Control whether screenshots are automatically staged when copied to a git"
         " repository."
@@ -541,7 +550,7 @@ def configure(source, destination, auto_stage_enabled, output_format):
     if destination:
         set_default_destination(destination)
 
-    if auto_stage_enabled:
+    if auto_stage_enabled is not None:
         set_auto_stage(auto_stage_enabled)
 
     if output_format:
