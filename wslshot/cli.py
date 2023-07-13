@@ -116,7 +116,6 @@ def wslshot_cli(source, destination, count, output_format):
 
     # Automatically stage the screenshot(s) if the destination is a git repo.
     # But only if auto_stage is enabled in the config.
-    print(f"{config['auto_stage_enabled']=}")
     if is_git_repo() and bool(config["auto_stage_enabled"]):
         stage_screenshots(copied_screenshots)
         copied_screenshots = format_screenshots_path_for_git(copied_screenshots)
