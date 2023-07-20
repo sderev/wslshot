@@ -96,7 +96,7 @@ Remember to consult your VM provider's documentation for specific instructions o
 
 ## Configuration of `wslshot`
 
-Before using `wslshot`, you may want to configure it to suit your needs. You can do this using the `config` command:
+Before using `wslshot`, you may want to configure it to suit your needs. You can do this using the `configure` command:
 
 ```bash
 wslshot configure --source /path/to/source --auto-stage-enabled True --output-format HTML
@@ -120,7 +120,7 @@ Remember, these are just the default settings. You can override these settings o
 wslshot
 ```
 
-This will fetch the most recent screenshots from the source directory. If this command is ran inside a git repository, it will create the folder `/assets/images` (if it doesn't exist) and copy the screenshot to it.
+This will fetch the most recent screenshots from the source directory. If this command is run inside a git repository, it will create the folder `/assets/images` (if it doesn't exist) and copy the screenshot to it.
 
 **These are the folders automatically detected for the copy**:
 
@@ -140,7 +140,7 @@ This will fetch the three most recent screenshots.
 **These are all the possible options**:
 
 ```bash
-wslshot [--source /custom/source] [--destination /custom/destination] [--count 3] [--output HTML]
+wslshot [--source /custom/source] [--destination /custom/destination] [--count 3] [--output-format HTML]
 ```
 
 You can access the help message with `wslshot --help`.
