@@ -108,7 +108,7 @@ This command allows you to set various options:
 
 * **`--auto-stage-enabled`**: This option lets you control whether screenshots are automatically staged when copied to a git repository. By default, this option is set to `False`. If this option is set to `True`, any screenshot copied to a git repo will automatically be staged for commit.
 
-* **`--output-format` or `-o`**: This option lets you set the default output format for the links to the screenshots that `wslshot` creates. The available formats are Markdown, HTML, and the plain text of the path (`plain_text`). If you do not set this option, `wslshot` will output links in Markdown format by default.
+* **`--output-format` or `-f`**: This option lets you set the default output format for the links to the screenshots that `wslshot` creates. The available formats are Markdown, HTML, and the plain text of the path (`plain_text`). If you do not set this option, `wslshot` will output links in Markdown format by default.
 
 Remember, these are just the default settings. You can override these settings on a per-operation basis by providing the corresponding options when running the `wslshot` command.
 
