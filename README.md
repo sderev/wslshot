@@ -1,8 +1,8 @@
 # Windows Screenshot for Linux
 
-`wslshot` is a CLI tool that fetches the most recent screenshot(s) from a shared directory with a Windows host, then copies it to a specified directory in a Linux VM.
+`wslshot` is a CLI tool designed to fetch the latest screenshot(s) from a shared directory with a Windows host, copy them to a designated directory in a Linux VM, and output their new markdown-formatted paths.
 
-Simply capture a screenshot using the Windows Snipping tool (`win + shift + S`), and then activate `wslshot` in your terminal to seamlessly transfer the screenshot.
+Simply take a screenshot using the Windows Snipping tool (`win + shift + S`), and then run `wslshot` in your terminal to effortlessly transfer the image.
 
 ![demo_0](https://github.com/sderev/wslshot/assets/24412384/656b0595-0c27-41fa-966a-d6ca39ec410a)
 
@@ -25,7 +25,7 @@ Simply capture a screenshot using the Windows Snipping tool (`win + shift + S`),
 ## Features
 
 * Set a default source directory for screenshots.
-* Specify a custom source or destination directory per operation.
+* Designate a custom source or destination directory per operation.
     * Or automatically detect `/assets/images/` or other typical folders for this use case.
 * Fetch the most recent screenshot or specify a number of recent screenshots to fetch.
 * Control automatic staging of screenshots when copied to a git repository.
@@ -42,27 +42,6 @@ python3 -m pip install wslshot
 ```
 
 ### Install with pipx (recommended)
-
-[`pipx`](https://pypi.org/project/pipx/) is an alternative package manager for Python applications. It allows you to install and run Python applications in isolated environments without having to configure anything yourself.
-
-**First, install `pipx` if you haven't already**:
-
-* On macOS and Linux:
-
-  ```
-  python3 -m pip install --user pipx
-  ```
-
-Alternatively, you can use your package manager (`brew`, `apt`, etc.).
-
-* On Windows:
-
-  ```
-  py -m pip install --user pipx
-  py -m pipx ensurepath
-  ```
-
-**Once `pipx` is installed, you can install `wslshot` using the following command**:
 
 ```
 pipx install wslshot
