@@ -125,7 +125,7 @@ def wslshot_cli(source, destination, count, output_format):
     print_formatted_path(output_format, copied_screenshots)
 
 
-def get_screenshots(source: str, count: int) -> Tuple[Path]:
+def get_screenshots(source: str, count: int) -> Tuple[Path, ...]:
     """
     Get the most recent screenshot(s) from the source directory.
 
@@ -163,17 +163,20 @@ def get_screenshots(source: str, count: int) -> Tuple[Path]:
     return tuple(screenshots)
 
 
-def copy_screenshots(screenshots: Tuple[Path], destination: str) -> Tuple[Path]:
+def copy_screenshots(screenshots: Tuple[Path, ...], destination: str) -> Tuple[Path, ...]:
     """
     Copy the screenshot(s) to the destination directory.
 
     Args:
 
-    - source: The source directory.
-    - destination: The destination directory.
-    - count: The number of screenshots to fetch.
+    - screenshots: A tuple of Path objects representing the screenshot(s) to copy.
+    - destination: The path to the destination directory.
+
+    Returns:
+    
+    - A tuple of Path objects representing the new locations of the copied screenshot(s).
     """
-    copied_screenshots = ()
+    copied_screenshots: Tuple[Path, ...] = ()
 
     for idx, screenshot in enumerate(screenshots):
         new_screenshot_name = rename_screenshot(idx)
