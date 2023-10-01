@@ -23,8 +23,8 @@ import os
 import shutil
 import subprocess
 import sys
-from typing import Tuple
 from pathlib import Path
+from typing import Tuple
 
 import click
 
@@ -130,12 +130,10 @@ def get_screenshots(source: str, count: int) -> Tuple[Path, ...]:
     Get the most recent screenshot(s) from the source directory.
 
     Args:
-
     - source: The source directory.
     - count: The number of screenshots to fetch.
 
     Returns:
-
     - The screenshot(s)'s path.
     """
     # Get the most recent screenshot(s) from the source directory.
@@ -145,35 +143,35 @@ def get_screenshots(source: str, count: int) -> Tuple[Path, ...]:
         )[:count]
 
         if len(screenshots) == 0:
-            click.echo(f"No screenshots found in the source directory: {source}.")
-            sys.exit(1)
+            raise ValueError("No screenshot found.")
 
         if len(screenshots) < count:
             raise ValueError(
-                f"Only {len(screenshots)} screenshot(s) found in the source directory:"
-                f" {source}."
+                f"You requested {count} screenshot(s), but only {len(screenshots)} were found."
             )
     except ValueError as error:
         click.echo(
             f"{click.style('An error occurred while fetching the screenshot(s).',fg='red')}"
         )
-        click.echo(f"{error}\n")
+        click.echo(f"{error}")
+        click.echo(f"Source directory: {source}\n")
         sys.exit(1)
 
     return tuple(screenshots)
 
 
-def copy_screenshots(screenshots: Tuple[Path, ...], destination: str) -> Tuple[Path, ...]:
+def copy_screenshots(
+    screenshots: Tuple[Path, ...], destination: str
+) -> Tuple[Path, ...]:
     """
-    Copy the screenshot(s) to the destination directory.
+    Copy the screenshot(s) to the destination directory,
+    and rename the screenshot(s) to the current date and time.
 
     Args:
-
     - screenshots: A tuple of Path objects representing the screenshot(s) to copy.
     - destination: The path to the destination directory.
 
     Returns:
-    
     - A tuple of Path objects representing the new locations of the copied screenshot(s).
     """
     copied_screenshots: Tuple[Path, ...] = ()
@@ -192,7 +190,6 @@ def rename_screenshot(idx) -> str:
     Rename the screenshot to the current date and time.
 
     Returns:
-
     - The new screenshot name.
     """
     # Rename screenshot with ISO 8601 date and time, and append the index.
@@ -217,7 +214,7 @@ def stage_screenshots(screenshots: Tuple[Path]) -> None:
             click.echo(f"Failed to stage screenshot '{screenshot}'.")
 
 
-def format_screenshots_path_for_git(screenshots: Tuple[Path]) -> Tuple[Path]:
+def format_screenshots_path_for_git(screenshots: Tuple[Path]) -> Tuple[Path, ...]:
     """
     Format the screenshot(s)'s path for git.
 
@@ -226,7 +223,7 @@ def format_screenshots_path_for_git(screenshots: Tuple[Path]) -> Tuple[Path]:
     - screenshots: The screenshot(s).
     """
     img_dir = get_git_repo_img_destination().parent.parent
-    formatted_screenshots = ()
+    formatted_screenshots: Tuple[Path, ...] = ()
 
     for screenshot in screenshots:
         formatted_screenshots += (Path(screenshot).relative_to(img_dir),)
@@ -363,7 +360,7 @@ def read_config(config_file_path: Path) -> dict:
     return config
 
 
-def set_default_source(source: str) -> None:
+def set_default_source(source_str: str) -> None:
     """
     Set the default source directory.
 
@@ -371,7 +368,7 @@ def set_default_source(source: str) -> None:
         source: The default source directory.
     """
     try:
-        source = Path(source).resolve(strict=True)
+        source: Path = Path(source_str).resolve(strict=True)
     except FileNotFoundError as error:
         click.echo(f"Invalid source directory: {error}")
         sys.exit(1)
@@ -384,7 +381,7 @@ def set_default_source(source: str) -> None:
         json.dump(config, file)
 
 
-def set_default_destination(destination: str) -> None:
+def set_default_destination(destination_str: str) -> None:
     """
     Set the default destination directory.
 
@@ -392,7 +389,7 @@ def set_default_destination(destination: str) -> None:
         destination: The default destination directory.
     """
     try:
-        destination = Path(destination).resolve(strict=True)
+        destination: Path = Path(destination_str).resolve(strict=True)
     except FileNotFoundError as error:
         click.echo(f"Invalid destination directory: {error}")
         sys.exit(1)
@@ -450,7 +447,7 @@ def get_git_repo_img_destination() -> Path:
         The destination directory for a git repository.
     """
     try:
-        git_root = (
+        git_root_str = (
             subprocess.run(
                 ["git", "rev-parse", "--show-toplevel"],
                 check=True,
@@ -462,7 +459,7 @@ def get_git_repo_img_destination() -> Path:
     except subprocess.CalledProcessError:
         sys.exit("Failed to get git root directory.")
 
-    git_root = Path(git_root)
+    git_root: Path = Path(git_root_str)
 
     if (git_root / "img").exists():
         destination = git_root / "img"
