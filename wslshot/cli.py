@@ -53,7 +53,7 @@ import click
         " config."
     ),
 )
-@click.argument("image_path", type=click.Path(exists=True))
+@click.argument("image_path", type=click.Path(exists=True), required=False)
 def wslshot(ctx, source, destination, count, output_format, image_path):
     """
     Fetches and copies the latest screenshot(s) from the source to the specified destination.
