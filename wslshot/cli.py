@@ -19,7 +19,6 @@ For detailed usage instructions, use 'wslshot --help' or 'wslshot [command] --he
 
 import datetime
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -54,9 +53,10 @@ import click
         " config."
     ),
 )
-def wslshot(ctx, source, destination, count, output_format):
+@click.argument("image_path", type=click.Path(exists=True))
+def wslshot(ctx, source, destination, count, output_format, image_path):
     """
-    Fetches and copies the latest screenshot(s) from the source to a specified destination.
+    Fetches and copies the latest screenshot(s) from the source to the specified destination.
 
     Usage:
 
@@ -65,12 +65,12 @@ def wslshot(ctx, source, destination, count, output_format):
     - Customize output format (Markdown, HTML, or path) with --output.
     """
     if ctx.invoked_subcommand is None:
-        wslshot_cli(source, destination, count, output_format)
+        wslshot_cli(source, destination, count, output_format, image_path)
 
 
-def wslshot_cli(source, destination, count, output_format):
+def wslshot_cli(source, destination, count, output_format, image_path):
     """
-    Fetches and copies the latest screenshot(s) from the source to a specified destination.
+    Fetches and copies the latest screenshot(s) from the source to the specified destination.
 
     Args:
 
@@ -110,11 +110,30 @@ def wslshot_cli(source, destination, count, output_format):
         print("Valid options are: markdown, html, plain_text")
         sys.exit(1)
 
-    # Copy the screenshot(s) to the destination directory.
-    source_screenshots = get_screenshots(source, count)
-    copied_screenshots = copy_screenshots(source_screenshots, destination)
+    # If the user specified an image path, copy it to the destination directory.
+    if image_path:
+        try:
+            if not image_path.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
+                raise ValueError(
+                    "Invalid image format (supported formats: png, jpg, jpeg, gif)."
+                )
+        except ValueError as error:
+            click.echo(
+                f"{click.style('An error occurred while fetching the screenshot(s).',fg='red')}",
+                err=True,
+            )
+            click.echo(f"{error}", err=True)
+            click.echo(f"Source file: {image_path}", err=True)
+            sys.exit(1)
 
-    # Automatically stage the screenshot(s) if the destination is a git repo.
+        image_path = (Path(image_path),)  # For compatibility with copy_screenshots()
+        copied_screenshots = copy_screenshots(image_path, destination)
+    else:
+        # Copy the screenshot(s) to the destination directory.
+        source_screenshots = get_screenshots(source, count)
+        copied_screenshots = copy_screenshots(source_screenshots, destination)
+
+    # Automatically stage the screenshot(s) if the destination is a Git repo.
     # But only if auto_stage is enabled in the config.
     if is_git_repo():
         copied_screenshots = format_screenshots_path_for_git(copied_screenshots)
@@ -138,9 +157,17 @@ def get_screenshots(source: str, count: int) -> Tuple[Path, ...]:
     """
     # Get the most recent screenshot(s) from the source directory.
     try:
-        screenshots = sorted(
-            Path(source).glob("*.png"), key=os.path.getmtime, reverse=True
-        )[:count]
+        # Collect files with different extensions
+        extensions = ("png", "jpg", "jpeg", "gif")
+        screenshots = [
+            file for ext in extensions for file in Path(source).glob(f"*.{ext}")
+        ]
+
+        # Sort by modification time
+        screenshots.sort(key=lambda file: file.stat().st_mtime, reverse=True)
+
+        # Take the `count` most recent files
+        screenshots = screenshots[:count]
 
         if len(screenshots) == 0:
             raise ValueError("No screenshot found.")
@@ -177,7 +204,7 @@ def copy_screenshots(
     copied_screenshots: Tuple[Path, ...] = ()
 
     for idx, screenshot in enumerate(screenshots):
-        new_screenshot_name = rename_screenshot(idx)
+        new_screenshot_name = rename_screenshot(idx, screenshot)
         new_screenshot_path = Path(destination) / new_screenshot_name
         shutil.copy(screenshot, new_screenshot_path)
         copied_screenshots += (Path(destination) / new_screenshot_name,)
@@ -185,28 +212,36 @@ def copy_screenshots(
     return copied_screenshots
 
 
-def rename_screenshot(idx) -> str:
+def rename_screenshot(idx: int, screenshot_path: Path) -> str:
     """
     Rename the screenshot to the current date and time.
 
     Returns:
     - The new screenshot name.
     """
-    # Rename screenshot with ISO 8601 date and time, and append the index.
-    return (
-        f"screenshot_{datetime.datetime.now().isoformat(timespec='seconds')}_{idx}.png"
-    )
+    original_name = screenshot_path.stem
+    file_extension = screenshot_path.suffix.lstrip(".")
+
+    # Check if the file is a GIF.
+    is_gif = file_extension == "gif"
+    prefix = "animated_" if is_gif else ""
+
+    if is_gif:
+        return f"{prefix}{original_name}.{file_extension}"
+    else:
+        # Rename screenshot with ISO 8601 date and time, and append the index.
+        return f"{prefix}screenshot_{datetime.datetime.now().isoformat(timespec='seconds')}_{idx}.{file_extension}"
 
 
 def stage_screenshots(screenshots: Tuple[Path]) -> None:
     """
-    Automatically stage the screenshot(s) if the destination is a git repo.
+    Automatically stage the screenshot(s) if the destination is a Git repo.
 
     Args:
 
     - screenshots: The screenshot(s).
     """
-    # Automatically stage the screenshot(s) if the destination is a git repo.
+    # Automatically stage the screenshot(s) if the destination is a Git repo.
     for screenshot in screenshots:
         try:
             subprocess.run(["git", "add", str(screenshot)], check=True)
@@ -241,7 +276,7 @@ def print_formatted_path(output_format: str, screenshots: Tuple[Path]) -> None:
     - screenshots: The screenshot(s).
     """
     for screenshot in screenshots:
-        # Adding a '/' to the screenshot path if the destination is a git repo.
+        # Adding a '/' to the screenshot path if the destination is a Git repo.
         # This is because the screenshot path is relative to the git repo's.
         if is_git_repo():
             screenshot_path = f"/{screenshot}"
@@ -285,7 +320,7 @@ def write_default_config(config_file_path: Path) -> None:
     """
     click.echo(f"{click.style('Creating the configuration file...', fg='yellow')}")
 
-    # Ask the user for the source dir
+    # Ask the user for the source dir.
     while True:
         try:
             click.echo(
@@ -421,10 +456,10 @@ def get_destination() -> Path:
 
 def is_git_repo() -> bool:
     """
-    Check if the current directory is a git repository.
+    Check if the current directory is a Git repository.
 
     Returns:
-        True if the current directory is a git repository, False otherwise.
+        True if the current directory is a Git repository, False otherwise.
     """
     try:
         subprocess.run(
@@ -441,10 +476,10 @@ def is_git_repo() -> bool:
 
 def get_git_repo_img_destination() -> Path:
     """
-    Get the destination directory for a git repository.
+    Get the destination directory for a Git repository.
 
     Returns:
-        The destination directory for a git repository.
+        The destination directory for a Git repository.
     """
     try:
         git_root_str = (
@@ -478,10 +513,10 @@ def get_git_repo_img_destination() -> Path:
 
 def set_auto_stage(auto_stage_enabled: bool) -> None:
     """
-    Set whether screenshots are automatically staged when copied to a git repository.
+    Set whether screenshots are automatically staged when copied to a Git repository.
 
     Args:
-        auto_stage_enabled: Whether screenshots are automatically staged when copied to a git repo.
+        auto_stage_enabled: Whether screenshots are automatically staged when copied to a Git repo.
     """
     config_file_path = get_config_file_path()
     config = read_config(config_file_path)
