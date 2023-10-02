@@ -52,7 +52,7 @@ pipx install wslshot
 
 ## Windows Configuration
 
-Before using `wslshot`, it's essential to configure the Windows Snipping Tool to save screenshots automatically. It should be the default behavior, but if that's not the case, here is how to enable the automatic save of screenshots in the Windows Snipping Tool:
+Before using `wslshot`, it's essential to configure the Windows Snipping Tool to save screenshots automatically. It should be the default behavior; if it's not, here's how to enable automatic saving of screenshots in the Windows Snipping Tool:
 
 1. Open the Snipping Tool.
 1. Click on "Settings...".
@@ -68,11 +68,11 @@ If you are using the Windows Subsystem for Linux (WSL), you can directly access 
 
 ### For Virtual Machine Users
 
-If you are using a different kind of virtual machine (like VirtualBox or VMware), you need to set up a shared folder. The process varies depending on your VM provider, but here are general steps:
+If you are using a traditional virtual machine managed by a hypervisor (e.g., VirtualBox, VMware, Hyper-V), you'll need to set up a shared folder your Windows host and the Linux VM. The process varies depending on your VM provider, but here are general steps:
 
 1. Choose a folder on your Windows host to use as your screenshot folder. This should be the same folder where you configured your Snipping Tool to automatically save screenshots.
 1. Go into your VM settings and locate the shared folders option. Add the chosen screenshot folder as a shared folder.
-1. Depending on your VM settings, this folder will now be available at a certain path in your Linux environment. This is the path you should use as your source directory for `wslshot`.
+1. Depending on your VM settings, this folder will now be available at a certain path in your Linux environment. Use this path as your source directory for `wslshot`.
 
 Remember to consult your VM provider's documentation for specific instructions on how to set up shared folders.
 
