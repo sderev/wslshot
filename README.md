@@ -137,7 +137,7 @@ Note that you can _drag and drop_ a file into the Windows Terminal to automatica
 
 ### Output
 
-Upon successful execution, the command will output the new path of the image in Markdown format:
+Upon success, the command will output the new path of the image in Markdown format:
 
 ```bash
 ![magic.gif](/assets/images/animated_magic.gif)
