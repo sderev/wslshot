@@ -178,10 +178,11 @@ def get_screenshots(source: str, count: int) -> Tuple[Path, ...]:
             )
     except ValueError as error:
         click.echo(
-            f"{click.style('An error occurred while fetching the screenshot(s).',fg='red')}"
+            f"{click.style('An error occurred while fetching the screenshot(s).',fg='red')}",
+            err=True,
         )
-        click.echo(f"{error}")
-        click.echo(f"Source directory: {source}\n")
+        click.echo(f"{error}", err=True)
+        click.echo(f"Source directory: {source}\n", err=True)
         sys.exit(1)
 
     return tuple(screenshots)
@@ -355,8 +356,10 @@ def write_default_config(config_file_path: Path) -> None:
             click.echo(f"\n{click.style('Aborted', fg='red')}")
             sys.exit(1)
         except FileNotFoundError as error:
-            click.echo("Invalid source directory")
-            click.echo(f"The path does not exist or is not accessible: {error}")
+            click.echo("Invalid source directory", err=True)
+            click.echo(
+                f"The path does not exist or is not accessible: {error}", err=True
+            )
         else:
             break
 
@@ -405,7 +408,7 @@ def set_default_source(source_str: str) -> None:
     try:
         source: Path = Path(source_str).resolve(strict=True)
     except FileNotFoundError as error:
-        click.echo(f"Invalid source directory: {error}")
+        click.echo(f"Invalid source directory: {error}", err=True)
         sys.exit(1)
 
     config_file_path = get_config_file_path()
@@ -426,7 +429,7 @@ def set_default_destination(destination_str: str) -> None:
     try:
         destination: Path = Path(destination_str).resolve(strict=True)
     except FileNotFoundError as error:
-        click.echo(f"Invalid destination directory: {error}")
+        click.echo(f"Invalid destination directory: {error}", err=True)
         sys.exit(1)
 
     config_file_path = get_config_file_path()
