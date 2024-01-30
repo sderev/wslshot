@@ -299,102 +299,176 @@ def print_formatted_path(output_format: str, screenshots: Tuple[Path]) -> None:
 
 def get_config_file_path() -> Path:
     """
-    Create the config file.
+    Create the configuration file.
     """
     config_file_path = Path.home() / ".config" / "wslshot" / "config.json"
     config_file_path.parent.mkdir(parents=True, exist_ok=True)
 
     if not config_file_path.exists():
         config_file_path.touch()
-        write_default_config(config_file_path)
+        write_config(config_file_path)
 
     return config_file_path
 
 
-def write_default_config(config_file_path: Path) -> None:
+def read_config(config_file_path: Path) -> Dict[str, Any]:
     """
-    Write the config file.
+    Read the configuration file.
+
+    If the configuration file does not exist, a default configuration file is created.
 
     Args:
-        config_file_path: The path to the config file.
-    """
-    click.echo(f"{click.style('Creating the configuration file...', fg='yellow')}")
-
-    # Ask the user for the source dir.
-    while True:
-        try:
-            click.echo(
-                "The source directory must be a shared folder between Windows and your"
-                " Linux VM."
-            )
-
-            click.echo()
-            click.echo("---")
-
-            click.echo(
-                "* If you are using WSL, you can choose the 'Screenshots' folder in"
-                " your 'Pictures' directory. (e.g., /mnt/c/users/...)"
-            )
-
-            click.echo()
-
-            click.echo(
-                "* For VM users, you should configure a shared folder between Windows"
-                " and the VM before proceeding."
-            )
-            click.echo("---")
-            click.echo()
-
-            source = click.prompt(
-                (
-                    f"{click.style('Please enter the path for the default source directory', fg='blue')}"
-                ),
-                type=str,
-            )
-        except click.exceptions.Abort:
-            click.echo(f"\n{click.style('Aborted', fg='red')}")
-            sys.exit(1)
-        except FileNotFoundError as error:
-            click.echo("Invalid source directory", err=True)
-            click.echo(
-                f"The path does not exist or is not accessible: {error}", err=True
-            )
-        else:
-            break
-
-    config = {
-        "default_source": source,
-        "default_destination": "",
-        "auto_stage_enabled": False,
-        "default_output_format": "markdown",
-    }
-
-    with open(config_file_path, "w", encoding="UTF-8") as file:
-        json.dump(config, file)
-
-    click.echo(f"{click.style('Configuration file created', fg='green')}")
-
-
-def read_config(config_file_path: Path) -> dict:
-    """
-    Read the config file.
-
-    Args:
-        config_file_path: The path to the config file.
+        config_file_path: The path to the configuration file.
 
     Returns:
-        The config file as a dictionary.
+        The configuration file as a dictionary.
     """
     try:
         with open(config_file_path, "r", encoding="UTF-8") as file:
             config = json.load(file)
 
     except json.JSONDecodeError:
-        write_default_config(config_file_path)
+        write_config(config_file_path)
         with open(config_file_path, "r", encoding="UTF-8") as file:
             config = json.load(file)
 
     return config
+
+
+def write_config(config_file_path: Path) -> None:
+    """
+    Write the configuration file.
+
+    Args:
+        config_file_path: The path to the configuration file.
+    """
+
+    # Read the current configuration file if it exists.
+    try:
+        with open(config_file_path, "r", encoding="UTF-8") as file:
+            current_config = json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        current_config = {}
+
+    if current_config:
+        click.echo(f"{click.style('Updating the configuration file...', fg='yellow')}")
+    else:
+        click.echo(f"{click.style('Creating the configuration file...', fg='yellow')}")
+    click.echo()
+
+    # Configuration fields
+    config_fields = {
+        "default_source": ("Enter the path for the default source directory", ""),
+        "default_destination": (
+            "Enter the path for the default destination directory",
+            "",
+        ),
+        "auto_stage_enabled": (
+            "Automatically stage screenshots when copying to a git repository?",
+            False,
+        ),
+        "default_output_format": (
+            "Enter the default output format (markdown, html, plain_text)",
+            "markdown",
+        ),
+    }
+
+    # Prompt the user for configuration values.
+    config = {}
+    for field, (message, default) in config_fields.items():
+        if field in ["default_source", "default_destination"]:
+            config[field] = get_validated_directory_input(
+                field, message, current_config, default
+            )
+        elif field == "auto_stage_enabled":
+            config[field] = get_config_boolean_input(
+                field, message, current_config, default
+            )
+        elif field == "default_output_format":
+            config[field] = get_validated_input(
+                field,
+                message,
+                current_config,
+                default,
+                options=["markdown", "html", "plain_text"],
+            )
+        else:
+            config[field] = get_config_input(field, message, current_config, default)
+
+    # Writing configuration to file
+    try:
+        with open(config_file_path, "w", encoding="UTF-8") as file:
+            json.dump(config, file, indent=4)
+    except FileNotFoundError as error:
+        click.echo(f"Failed to write configuration file: {error}", err=True)
+        sys.exit(1)
+
+    if current_config:
+        click.echo(f"{click.style('Configuration file updated', fg='green')}")
+    else:
+        click.echo(f"{click.style('Configuration file created', fg='green')}")
+
+
+def get_config_input(field, message, current_config, default="") -> str:
+    existing = current_config.get(field, default)
+    return click.prompt(
+        click.style(message, fg="blue"),
+        type=str,
+        default=existing,
+        show_default=True,
+    )
+
+
+def get_config_boolean_input(field, message, current_config, default=False) -> bool:
+    existing = current_config.get(field, default)
+    return click.confirm(
+        click.style(message, fg="blue"),
+        default=existing,
+    )
+
+
+def get_validated_directory_input(field, message, current_config, default) -> str:
+    while True:
+        directory = get_config_input(field, message, current_config, default)
+
+        # If no value is provided, use the default (that is, an empty string).
+        if not directory.strip():
+            return default
+
+        try:
+            return str(Path(directory).resolve(strict=True))
+        except FileNotFoundError as error:
+            click.echo(
+                click.style(f"Invalid {field.replace('_', ' ')}: {error}", fg="red"),
+                err=True,
+            )
+        finally:
+            click.echo()
+
+
+def get_validated_input(
+    field, message, current_config, default="", options=None
+) -> str:
+    existing = current_config.get(field, default)
+
+    while True:
+        value = click.prompt(
+            click.style(message, fg="blue"),
+            type=str,
+            default=existing,
+            show_default=True,
+        )
+
+        if options and value.lower() not in options:
+            click.echo(
+                click.style(
+                    f"Invalid option for {field.replace('_', ' ')}. Please choose from {', '.join(options)}.",
+                    fg="red",
+                )
+            )
+            continue
+
+        return value
 
 
 def set_default_source(source_str: str) -> None:
@@ -405,9 +479,11 @@ def set_default_source(source_str: str) -> None:
         source: The default source directory.
     """
     try:
-        source: Path = Path(source_str).resolve(strict=True)
+        source: Path = str(Path(source_str).resolve(strict=True))
     except FileNotFoundError as error:
-        click.echo(f"Invalid source directory: {error}", err=True)
+        click.echo(
+            click.style(f"Invalid source directory: {error}", fg="red"), err=True
+        )
         sys.exit(1)
 
     config_file_path = get_config_file_path()
@@ -415,7 +491,7 @@ def set_default_source(source_str: str) -> None:
     config["default_source"] = source
 
     with open(config_file_path, "w", encoding="UTF-8") as file:
-        json.dump(config, file)
+        json.dump(config, file, indent=4)
 
 
 def set_default_destination(destination_str: str) -> None:
@@ -426,9 +502,11 @@ def set_default_destination(destination_str: str) -> None:
         destination: The default destination directory.
     """
     try:
-        destination: Path = Path(destination_str).resolve(strict=True)
+        destination: Path = str(Path(destination_str).resolve(strict=True))
     except FileNotFoundError as error:
-        click.echo(f"Invalid destination directory: {error}", err=True)
+        click.echo(
+            click.style(f"Invalid destination directory: {error}", fg="red"), err=True
+        )
         sys.exit(1)
 
     config_file_path = get_config_file_path()
@@ -436,7 +514,7 @@ def set_default_destination(destination_str: str) -> None:
     config["default_destination"] = destination
 
     with open(config_file_path, "w", encoding="UTF-8") as file:
-        json.dump(config, file)
+        json.dump(config, file, indent=4)
 
 
 def get_destination() -> Path:
@@ -525,7 +603,7 @@ def set_auto_stage(auto_stage_enabled: bool) -> None:
     config["auto_stage_enabled"] = auto_stage_enabled
 
     with open(config_file_path, "w", encoding="UTF-8") as file:
-        json.dump(config, file)
+        json.dump(config, file, indent=4)
 
 
 def set_default_output_format(output_format: str) -> None:
@@ -536,8 +614,10 @@ def set_default_output_format(output_format: str) -> None:
         output_format: The default output format.
     """
     if output_format.casefold() not in ["markdown", "html", "plain_text"]:
-        click.echo(f"Invalid output format: {output_format}")
-        click.echo("Valid options are: markdown, html, plain_text")
+        click.echo(
+            click.style(f"Invalid output format: {output_format}", fg="red"), err=True
+        )
+        click.echo("Valid options are: markdown, html, plain_text", err=True)
         sys.exit(1)
 
     config_file_path = get_config_file_path()
@@ -545,7 +625,7 @@ def set_default_output_format(output_format: str) -> None:
     config["default_output_format"] = output_format.casefold()
 
     with open(config_file_path, "w", encoding="UTF-8") as file:
-        json.dump(config, file)
+        json.dump(config, file, indent=4)
 
 
 @wslshot.command()
@@ -559,7 +639,6 @@ def set_default_output_format(output_format: str) -> None:
 )
 @click.option(
     "--auto-stage-enabled",
-    "-a",
     type=bool,
     help=(
         "Control whether screenshots are automatically staged when copied to a git"
@@ -578,9 +657,24 @@ def configure(source, destination, auto_stage_enabled, output_format):
     Usage:
 
     - Specify the default source directory with --source.
+
     - Control whether screenshots are automatically staged with --auto-stage.
+
     - Set the default output format (markdown, HTML, path) with --output-format.
+
+    ___
+
+    The source directory must be a shared folder between Windows and your Linux VM:
+
+    - If you are using WSL, you can choose the 'Screenshots' folder in your 'Pictures' directory. (e.g., /mnt/c/users/...)
+
+    - For VM users, you should configure a shared folder between Windows and the VM before proceeding.
     """
+    # When no options are specified, ask the user for their preferences.
+    if not any((source, destination, auto_stage_enabled, output_format)):
+        write_config(get_config_file_path())
+
+    # Otherwise, set the specified options.
     if source:
         set_default_source(source)
 
