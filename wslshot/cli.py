@@ -23,14 +23,27 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Tuple
+from typing import Any, Dict, Tuple
 
 import click
+from click_default_group import DefaultGroup
 
 
-@click.group(invoke_without_command=True, no_args_is_help=False)
-@click.pass_context
-@click.version_option()
+@click.group(cls=DefaultGroup, default="fetch", default_if_no_args=True)
+@click.version_option(package_name="wslshot")
+def wslshot():
+    """
+    Fetches and copies the latest screenshot(s) from the source to the specified destination.
+
+    Usage:
+
+    - Customize the number of screenshots with --count.
+    - Specify source and destination directories with --source and --destination.
+    - Customize output format (Markdown, HTML, or path) with --output.
+    """
+
+
+@wslshot.command()
 @click.option(
     "--source", "-s", help="Specify a custom source directory for this operation."
 )
@@ -54,21 +67,7 @@ import click
     ),
 )
 @click.argument("image_path", type=click.Path(exists=True), required=False)
-def wslshot(ctx, source, destination, count, output_format, image_path):
-    """
-    Fetches and copies the latest screenshot(s) from the source to the specified destination.
-
-    Usage:
-
-    - Customize the number of screenshots with --count.
-    - Specify source and destination directories with --source and --destination.
-    - Customize output format (Markdown, HTML, or path) with --output.
-    """
-    if ctx.invoked_subcommand is None:
-        wslshot_cli(source, destination, count, output_format, image_path)
-
-
-def wslshot_cli(source, destination, count, output_format, image_path):
+def fetch(source, destination, count, output_format, image_path):
     """
     Fetches and copies the latest screenshot(s) from the source to the specified destination.
 
