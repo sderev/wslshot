@@ -68,13 +68,13 @@ If you are using the Windows Subsystem for Linux (WSL), you can directly access 
 
 ### For Virtual Machine Users
 
-If you are using a traditional virtual machine managed by a hypervisor (e.g., VirtualBox, VMware, Hyper-V), you'll need to set up a shared folder with your Windows host and the Linux VM. The process varies depending on your VM provider, but here are general steps:
+If you are using a traditional virtual machine managed by a hypervisor (e.g., VirtualBox, VMware, Hyper-V), you'll need to set up a shared folder with your Windows host and the Linux VM. The process varies depending on your hypervisor, but here are general steps:
 
 1. Choose a folder on your Windows host to use as your screenshot folder. This should be the same folder where you configured your Snipping Tool to automatically save screenshots.
 1. Go into your VM settings and locate the shared folders option. Add the chosen screenshot folder as a shared folder.
 1. Depending on your VM settings, this folder will now be available at a certain path in your Linux environment. Use this path as your source directory for `wslshot`.
 
-Remember to consult your VM provider's documentation for specific instructions on how to set up shared folders.
+Remember to consult the documentation of your hypervisor for specific instructions on how to set up shared folders.
 
 ## Configuration of `wslshot`
 
