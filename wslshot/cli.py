@@ -16,7 +16,6 @@ Features:
 For detailed usage instructions, use 'wslshot --help' or 'wslshot [command] --help'.
 """
 
-
 import datetime
 import json
 import shutil
@@ -44,9 +43,7 @@ def wslshot():
 
 
 @wslshot.command()
-@click.option(
-    "--source", "-s", help="Specify a custom source directory for this operation."
-)
+@click.option("--source", "-s", help="Specify a custom source directory for this operation.")
 @click.option(
     "--destination",
     "-d",
@@ -62,8 +59,7 @@ def wslshot():
     "--output-format",
     "-f",
     help=(
-        "Specify the output format (markdown, HTML, path). Overrides the default set in"
-        " config."
+        "Specify the output format (markdown, HTML, path). Overrides the default set in" " config."
     ),
 )
 @click.argument("image_path", type=click.Path(exists=True), required=False)
@@ -111,17 +107,15 @@ def fetch(source, destination, count, output_format, image_path):
         output_format = config["default_output_format"]
 
     if output_format.casefold() not in ("markdown", "html", "plain_text"):
-        print(f"Invalid output format: {output_format}")
-        print("Valid options are: markdown, html, plain_text")
+        click.echo(f"Invalid output format: {output_format}")
+        click.echo("Valid options are: markdown, html, plain_text")
         sys.exit(1)
 
     # If the user specified an image path, copy it to the destination directory.
     if image_path:
         try:
             if not image_path.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
-                raise ValueError(
-                    "Invalid image format (supported formats: png, jpg, jpeg, gif)."
-                )
+                raise ValueError("Invalid image format (supported formats: png, jpg, jpeg, gif).")
         except ValueError as error:
             click.echo(
                 f"{click.style('An error occurred while fetching the screenshot(s).',fg='red')}",
@@ -164,9 +158,7 @@ def get_screenshots(source: str, count: int) -> Tuple[Path, ...]:
     try:
         # Collect files with different extensions
         extensions = ("png", "jpg", "jpeg", "gif")
-        screenshots = [
-            file for ext in extensions for file in Path(source).glob(f"*.{ext}")
-        ]
+        screenshots = [file for ext in extensions for file in Path(source).glob(f"*.{ext}")]
 
         # Sort by modification time
         screenshots.sort(key=lambda file: file.stat().st_mtime, reverse=True)
@@ -193,9 +185,7 @@ def get_screenshots(source: str, count: int) -> Tuple[Path, ...]:
     return tuple(screenshots)
 
 
-def copy_screenshots(
-    screenshots: Tuple[Path, ...], destination: str
-) -> Tuple[Path, ...]:
+def copy_screenshots(screenshots: Tuple[Path, ...], destination: str) -> Tuple[Path, ...]:
     """
     Copy the screenshot(s) to the destination directory,
     and rename the screenshot(s) to the current date and time.
@@ -383,13 +373,9 @@ def write_config(config_file_path: Path) -> None:
     config = {}
     for field, (message, default) in config_fields.items():
         if field in ["default_source", "default_destination"]:
-            config[field] = get_validated_directory_input(
-                field, message, current_config, default
-            )
+            config[field] = get_validated_directory_input(field, message, current_config, default)
         elif field == "auto_stage_enabled":
-            config[field] = get_config_boolean_input(
-                field, message, current_config, default
-            )
+            config[field] = get_config_boolean_input(field, message, current_config, default)
         elif field == "default_output_format":
             config[field] = get_validated_input(
                 field,
@@ -452,9 +438,7 @@ def get_validated_directory_input(field, message, current_config, default) -> st
             click.echo()
 
 
-def get_validated_input(
-    field, message, current_config, default="", options=None
-) -> str:
+def get_validated_input(field, message, current_config, default="", options=None) -> str:
     existing = current_config.get(field, default)
 
     while True:
@@ -487,9 +471,7 @@ def set_default_source(source_str: str) -> None:
     try:
         source: Path = str(Path(source_str).resolve(strict=True))
     except FileNotFoundError as error:
-        click.echo(
-            click.style(f"Invalid source directory: {error}", fg="red"), err=True
-        )
+        click.echo(click.style(f"Invalid source directory: {error}", fg="red"), err=True)
         sys.exit(1)
 
     config_file_path = get_config_file_path()
@@ -510,9 +492,7 @@ def set_default_destination(destination_str: str) -> None:
     try:
         destination: Path = str(Path(destination_str).resolve(strict=True))
     except FileNotFoundError as error:
-        click.echo(
-            click.style(f"Invalid destination directory: {error}", fg="red"), err=True
-        )
+        click.echo(click.style(f"Invalid destination directory: {error}", fg="red"), err=True)
         sys.exit(1)
 
     config_file_path = get_config_file_path()
@@ -620,9 +600,7 @@ def set_default_output_format(output_format: str) -> None:
         output_format: The default output format.
     """
     if output_format.casefold() not in ["markdown", "html", "plain_text"]:
-        click.echo(
-            click.style(f"Invalid output format: {output_format}", fg="red"), err=True
-        )
+        click.echo(click.style(f"Invalid output format: {output_format}", fg="red"), err=True)
         click.echo("Valid options are: markdown, html, plain_text", err=True)
         sys.exit(1)
 
@@ -635,9 +613,7 @@ def set_default_output_format(output_format: str) -> None:
 
 
 @wslshot.command()
-@click.option(
-    "--source", "-s", help="Specify the default source directory for this operation."
-)
+@click.option("--source", "-s", help="Specify the default source directory for this operation.")
 @click.option(
     "--destination",
     "-d",
@@ -647,8 +623,7 @@ def set_default_output_format(output_format: str) -> None:
     "--auto-stage-enabled",
     type=bool,
     help=(
-        "Control whether screenshots are automatically staged when copied to a git"
-        " repository."
+        "Control whether screenshots are automatically staged when copied to a git" " repository."
     ),
 )
 @click.option(
