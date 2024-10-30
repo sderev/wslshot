@@ -14,6 +14,8 @@ Simply take a screenshot using the Windows Snipping tool (`win + shift + S`), an
     1. [Install with `pip`](#install-with-pip)
     1. [Install with `pipx` (Recommended)](#install-with-pipx-recommended)
 1. [Windows Configuration](#windows-configuration)
+    1. [For Windows 11 Users](#for-windows-11-users)
+    1. [For Windows 10 Users](#for-windows-10-users)
 1. [Shared Folder Configuration](#shared-folder-configuration)
     1. [For WSL Users](#for-wsl-users)
     1. [For Virtual Machine Users](#for-virtual-machine-users)
@@ -52,11 +54,26 @@ pipx install wslshot
 
 ## Windows Configuration
 
-Before using `wslshot`, it's essential to configure the Windows Snipping Tool to save screenshots automatically. It should be the default behavior; if it's not, here's how to enable automatic saving of screenshots in the Windows Snipping Tool:
+Before using `wslshot`, you need to ensure that your screenshots are automatically saved to a folder accessible by your Linux environment.
+
+### For Windows 11 Users
+
+The Windows Snipping Tool in Windows 11 supports automatic saving of screenshots (it should be enabled by default):
 
 1. Open the Snipping Tool.
 1. Click on "Settings...".
 1. Toggle the box that says "Automatically save screenshots".
+
+### For Windows 10 Users
+
+The Snipping Tool in Windows 10 doesn't support automatic saving. However, you can use the following methods to automatically save screenshots:
+
+1. **Use `Win + PrtScn`**: It captures the entire screen and saves to `C:\Users\[Your Username]\Pictures\Screenshots`.
+1. **Use `Win + Alt + PrtScn`**: It captures the active window and saves to `C:\Users\[Your Username]\Videos\Captures`.
+    * To unify the save folder, right-click on the `Captures` folder, select **Properties**, and set your desired folder in the **Location** tab.
+1. **Use a third-party tool**.
+
+You can still use the Snipping Tool, but you'll need to manually save each screenshot after capturing it.
 
 ## Shared Folder Configuration
 
