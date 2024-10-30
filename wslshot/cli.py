@@ -87,7 +87,10 @@ def fetch(source, destination, count, output_format, image_path):
     try:
         source = Path(source).resolve(strict=True)
     except FileNotFoundError:
-        print(f"Source directory '{source}' does not exist.")
+        click.echo(
+            f"{click.style(f'Source directory {source} does not exist.', fg='red')}",
+            err=True,
+        )
         sys.exit(1)
 
     # Destination directory
@@ -97,7 +100,10 @@ def fetch(source, destination, count, output_format, image_path):
     try:
         destination = Path(destination).resolve(strict=True)
     except FileNotFoundError:
-        print(f"Destination directory '{destination}' does not exist.")
+        click.echo(
+            f"{click.style(f'Destination directory {destination} does not exist.', fg='red')}",
+            err=True,
+        )
         sys.exit(1)
 
     # Output format
@@ -284,16 +290,16 @@ def print_formatted_path(output_format: str, screenshots: Tuple[Path]) -> None:
             screenshot_path = str(screenshot)  # This is an absolute path.
 
         if output_format == "markdown":
-            print(f"![{screenshot.name}]({screenshot_path})")
+            click.echo(f"![{screenshot.name}]({screenshot_path})")
 
         elif output_format == "html":
-            print(f'<img src="{screenshot_path}" alt="{screenshot.name}">')
+            click.echo(f'<img src="{screenshot_path}" alt="{screenshot.name}">')
 
         elif output_format == "plain_text":
-            print(screenshot_path)
+            click.echo(screenshot_path)
 
         else:
-            print(f"Invalid output format: {output_format}")
+            click.echo(f"Invalid output format: {output_format}", err=True)
             sys.exit(1)
 
 
