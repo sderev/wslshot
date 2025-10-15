@@ -478,7 +478,7 @@ def set_default_source(source_str: str) -> None:
         source: The default source directory.
     """
     try:
-        source: Path = str(Path(source_str).resolve(strict=True))
+        source: str = str(Path(source_str).resolve(strict=True))
     except FileNotFoundError as error:
         click.echo(click.style(f"Invalid source directory: {error}", fg="red"), err=True)
         sys.exit(1)
@@ -499,7 +499,7 @@ def set_default_destination(destination_str: str) -> None:
         destination: The default destination directory.
     """
     try:
-        destination: Path = str(Path(destination_str).resolve(strict=True))
+        destination: str = str(Path(destination_str).resolve(strict=True))
     except FileNotFoundError as error:
         click.echo(click.style(f"Invalid destination directory: {error}", fg="red"), err=True)
         sys.exit(1)
