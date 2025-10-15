@@ -16,11 +16,11 @@ Features:
 For detailed usage instructions, use 'wslshot --help' or 'wslshot [command] --help'.
 """
 
-import datetime
 import json
 import shutil
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
@@ -187,8 +187,8 @@ def get_screenshots(source: str, count: int) -> Tuple[Path, ...]:
 
 def copy_screenshots(screenshots: Tuple[Path, ...], destination: str) -> Tuple[Path, ...]:
     """
-    Copy the screenshot(s) to the destination directory,
-    and rename the screenshot(s) to the current date and time.
+    Copy the screenshot(s) to the destination directory
+    and rename them with unique filesystem-friendly names.
 
     Args:
     - screenshots: A tuple of Path objects representing the screenshot(s) to copy.
@@ -199,8 +199,8 @@ def copy_screenshots(screenshots: Tuple[Path, ...], destination: str) -> Tuple[P
     """
     copied_screenshots: Tuple[Path, ...] = ()
 
-    for idx, screenshot in enumerate(screenshots):
-        new_screenshot_name = rename_screenshot(idx, screenshot)
+    for screenshot in screenshots:
+        new_screenshot_name = generate_screenshot_name(screenshot)
         new_screenshot_path = Path(destination) / new_screenshot_name
         shutil.copy(screenshot, new_screenshot_path)
         copied_screenshots += (Path(destination) / new_screenshot_name,)
@@ -208,25 +208,17 @@ def copy_screenshots(screenshots: Tuple[Path, ...], destination: str) -> Tuple[P
     return copied_screenshots
 
 
-def rename_screenshot(idx: int, screenshot_path: Path) -> str:
+def generate_screenshot_name(screenshot_path: Path) -> str:
     """
-    Rename the screenshot to the current date and time.
-
-    Returns:
-    - The new screenshot name.
+    Produce a filesystem-friendly name for a copied screenshot.
     """
-    original_name = screenshot_path.stem
-    file_extension = screenshot_path.suffix.lstrip(".")
+    suffix = screenshot_path.suffix.lower()
+    unique_fragment = uuid.uuid4().hex
 
-    # Check if the file is a GIF.
-    is_gif = file_extension == "gif"
-    prefix = "animated_" if is_gif else ""
+    if suffix == ".gif":
+        return f"animated_{unique_fragment}{suffix}"
 
-    if is_gif:
-        return f"{prefix}{original_name}.{file_extension}"
-    else:
-        # Rename screenshot with ISO 8601 date and time, and append the index.
-        return f"{prefix}screenshot_{datetime.datetime.now().isoformat(timespec='seconds')}_{idx}.{file_extension}"
+    return f"screenshot_{unique_fragment}{suffix}"
 
 
 def stage_screenshots(screenshots: Tuple[Path]) -> None:
