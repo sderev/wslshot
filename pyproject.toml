@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wslshot"
+version = "0.0.12"
+description = "Copy Windows screenshots into WSL for easy reuse."
+readme = "README.md"
+license = "Apache-2.0"
+authors = [{ name = "Sébastien De Revière" }]
+requires-python = ">=3.8"
+dependencies = [
+    "click",
+    "click-default-group",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[project.urls]
+Documentation = "https://github.com/sderev/wslshot"
+Issues = "https://github.com/sderev/wslshot/issues"
+Changelog = "https://github.com/sderev/wslshot/releases"
+
+[project.scripts]
+wslshot = "wslshot.cli:wslshot"
+
+[tool.setuptools]
+packages = ["wslshot"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
