@@ -7,7 +7,6 @@ from uuid import UUID
 
 import pytest
 from click.testing import CliRunner
-
 from wslshot import cli
 
 

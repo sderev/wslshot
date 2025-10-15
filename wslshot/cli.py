@@ -119,7 +119,7 @@ def fetch(source, destination, count, output_format, image_path):
                 raise ValueError("Invalid image format (supported formats: png, jpg, jpeg, gif).")
         except ValueError as error:
             click.echo(
-                f"{click.style('An error occurred while fetching the screenshot(s).',fg='red')}",
+                f"{click.style('An error occurred while fetching the screenshot(s).', fg='red')}",
                 err=True,
             )
             click.echo(f"{error}", err=True)
@@ -140,11 +140,11 @@ def fetch(source, destination, count, output_format, image_path):
         try:
             git_root = get_git_root()
         except RuntimeError as error:
-            click.echo(click.style(str(error), fg='red'), err=True)
+            click.echo(click.style(str(error), fg="red"), err=True)
         else:
             relative_screenshots = format_screenshots_path_for_git(copied_screenshots, git_root)
 
-            if bool(config['auto_stage_enabled']) and relative_screenshots:
+            if bool(config["auto_stage_enabled"]) and relative_screenshots:
                 stage_screenshots(relative_screenshots, git_root)
 
     if relative_screenshots:
@@ -185,7 +185,7 @@ def get_screenshots(source: str, count: int) -> Tuple[Path, ...]:
             )
     except ValueError as error:
         click.echo(
-            f"{click.style('An error occurred while fetching the screenshot(s).',fg='red')}",
+            f"{click.style('An error occurred while fetching the screenshot(s).', fg='red')}",
             err=True,
         )
         click.echo(f"{error}", err=True)
@@ -638,9 +638,7 @@ def set_default_output_format(output_format: str) -> None:
 @click.option(
     "--auto-stage-enabled",
     type=bool,
-    help=(
-    "Control whether screenshots are automatically staged when copied to a git repository."
-    ),
+    help=("Control whether screenshots are automatically staged when copied to a git repository."),
 )
 @click.option(
     "--output-format",
