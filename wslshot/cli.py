@@ -22,7 +22,7 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import click
 from click_default_group import DefaultGroup
@@ -132,15 +132,24 @@ def fetch(source, destination, count, output_format, image_path):
         source_screenshots = get_screenshots(source, count)
         copied_screenshots = copy_screenshots(source_screenshots, destination)
 
-    # Automatically stage the screenshot(s) if the destination is a Git repo.
-    # But only if auto_stage is enabled in the config.
-    if is_git_repo():
-        copied_screenshots = format_screenshots_path_for_git(copied_screenshots)
-        if bool(config["auto_stage_enabled"]):
-            stage_screenshots(copied_screenshots)
+    relative_screenshots: Tuple[Path, ...] = ()
+    git_root: Optional[Path] = None
 
-    # Print the screenshot(s)'s path in the specified format.
-    print_formatted_path(output_format, copied_screenshots)
+    if is_git_repo():
+        try:
+            git_root = get_git_root()
+        except RuntimeError as error:
+            click.echo(click.style(str(error), fg='red'), err=True)
+        else:
+            relative_screenshots = format_screenshots_path_for_git(copied_screenshots, git_root)
+
+            if bool(config['auto_stage_enabled']) and relative_screenshots:
+                stage_screenshots(relative_screenshots, git_root)
+
+    if relative_screenshots:
+        print_formatted_path(output_format, relative_screenshots)
+    else:
+        print_formatted_path(output_format, copied_screenshots)
 
 
 def get_screenshots(source: str, count: int) -> Tuple[Path, ...]:
@@ -221,7 +230,7 @@ def generate_screenshot_name(screenshot_path: Path) -> str:
     return f"screenshot_{unique_fragment}{suffix}"
 
 
-def stage_screenshots(screenshots: Tuple[Path]) -> None:
+def stage_screenshots(screenshots: Tuple[Path, ...], git_root: Path) -> None:
     """
     Automatically stage the screenshot(s) if the destination is a Git repo.
 
@@ -232,12 +241,18 @@ def stage_screenshots(screenshots: Tuple[Path]) -> None:
     # Automatically stage the screenshot(s) if the destination is a Git repo.
     for screenshot in screenshots:
         try:
-            subprocess.run(["git", "add", str(screenshot)], check=True)
+            subprocess.run(
+                ["git", "add", str(screenshot)],
+                check=True,
+                cwd=git_root,
+            )
         except subprocess.CalledProcessError:
             click.echo(f"Failed to stage screenshot '{screenshot}'.")
 
 
-def format_screenshots_path_for_git(screenshots: Tuple[Path]) -> Tuple[Path, ...]:
+def format_screenshots_path_for_git(
+    screenshots: Tuple[Path, ...], git_root: Path
+) -> Tuple[Path, ...]:
     """
     Format the screenshot(s)'s path for git.
 
@@ -245,11 +260,13 @@ def format_screenshots_path_for_git(screenshots: Tuple[Path]) -> Tuple[Path, ...
 
     - screenshots: The screenshot(s).
     """
-    img_dir = get_git_repo_img_destination().parent.parent
     formatted_screenshots: Tuple[Path, ...] = ()
 
     for screenshot in screenshots:
-        formatted_screenshots += (Path(screenshot).relative_to(img_dir),)
+        try:
+            formatted_screenshots += (Path(screenshot).relative_to(git_root),)
+        except ValueError:
+            continue
 
     return formatted_screenshots
 
@@ -532,6 +549,23 @@ def is_git_repo() -> bool:
     return True
 
 
+def get_git_root() -> Path:
+    """
+    Get the absolute path to the current git repository root.
+    """
+    try:
+        git_root_bytes = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ).stdout
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError("Failed to get git root directory.") from error
+
+    return Path(git_root_bytes.strip().decode("utf-8")).resolve()
+
+
 def get_git_repo_img_destination() -> Path:
     """
     Get the destination directory for a Git repository.
@@ -540,19 +574,9 @@ def get_git_repo_img_destination() -> Path:
         The destination directory for a Git repository.
     """
     try:
-        git_root_str = (
-            subprocess.run(
-                ["git", "rev-parse", "--show-toplevel"],
-                check=True,
-                stdout=subprocess.PIPE,
-            )
-            .stdout.strip()
-            .decode("utf-8")
-        )
-    except subprocess.CalledProcessError:
-        sys.exit("Failed to get git root directory.")
-
-    git_root: Path = Path(git_root_str)
+        git_root = get_git_root()
+    except RuntimeError as error:
+        sys.exit(str(error))
 
     if (git_root / "img").exists():
         destination = git_root / "img"
