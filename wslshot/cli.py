@@ -310,7 +310,7 @@ def get_config_file_path() -> Path:
     config_file_path.parent.mkdir(parents=True, exist_ok=True)
 
     if not config_file_path.exists():
-        config_file_path.touch()
+        config_file_path.touch(mode=0o600)
         write_config(config_file_path)
 
     return config_file_path
