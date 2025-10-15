@@ -10,7 +10,7 @@ Features:
 - Specify the number of screenshots to be processed with the '--count' option.
 - Customize the source directory using '--source'.
 - Customize the destination directory using '--destination'.
-- Choose your preferred output format (Markdown, HTML, or raw path) with the '--output' option.
+- Choose your preferred output format (Markdown, HTML, or plain text) with the '--output-format' option.
 - Configure default settings with the 'configure' subcommand.
 
 For detailed usage instructions, use 'wslshot --help' or 'wslshot [command] --help'.
@@ -38,7 +38,7 @@ def wslshot():
 
     - Customize the number of screenshots with --count.
     - Specify source and destination directories with --source and --destination.
-    - Customize output format (Markdown, HTML, or path) with --output.
+    - Customize output format (Markdown, HTML, or plain text) with --output-format.
     """
 
 
@@ -53,13 +53,14 @@ def wslshot():
     "--count",
     "-n",
     default=1,
+    type=click.IntRange(min=1),
     help="Specify the number of most recent screenshots to fetch. Defaults to 1.",
 )
 @click.option(
     "--output-format",
     "-f",
     help=(
-        "Specify the output format (markdown, HTML, path). Overrides the default set in" " config."
+        "Specify the output format (markdown, html, plain_text). Overrides the default set in config."
     ),
 )
 @click.argument("image_path", type=click.Path(exists=True), required=False)
@@ -638,7 +639,7 @@ def set_default_output_format(output_format: str) -> None:
     "--auto-stage-enabled",
     type=bool,
     help=(
-        "Control whether screenshots are automatically staged when copied to a git" " repository."
+    "Control whether screenshots are automatically staged when copied to a git repository."
     ),
 )
 @click.option(
@@ -656,7 +657,7 @@ def configure(source, destination, auto_stage_enabled, output_format):
 
     - Control whether screenshots are automatically staged with --auto-stage.
 
-    - Set the default output format (markdown, HTML, path) with --output-format.
+    - Set the default output format (markdown, HTML, plain_text) with --output-format.
 
     ___
 
