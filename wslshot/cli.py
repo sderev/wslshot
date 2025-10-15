@@ -147,9 +147,9 @@ def fetch(source, destination, count, output_format, image_path):
                 stage_screenshots(relative_screenshots, git_root)
 
     if relative_screenshots:
-        print_formatted_path(output_format, relative_screenshots)
+        print_formatted_path(output_format, relative_screenshots, relative_to_repo=True)
     else:
-        print_formatted_path(output_format, copied_screenshots)
+        print_formatted_path(output_format, copied_screenshots, relative_to_repo=False)
 
 
 def get_screenshots(source: str, count: int) -> Tuple[Path, ...]:
@@ -271,7 +271,9 @@ def format_screenshots_path_for_git(
     return formatted_screenshots
 
 
-def print_formatted_path(output_format: str, screenshots: Tuple[Path]) -> None:
+def print_formatted_path(
+    output_format: str, screenshots: Tuple[Path, ...], *, relative_to_repo: bool
+) -> None:
     """
     Print the screenshot(s)'s path in the specified format.
 
@@ -283,10 +285,7 @@ def print_formatted_path(output_format: str, screenshots: Tuple[Path]) -> None:
     for screenshot in screenshots:
         # Adding a '/' to the screenshot path if the destination is a Git repo.
         # This is because the screenshot path is relative to the git repo's.
-        if is_git_repo():
-            screenshot_path = f"/{screenshot}"
-        else:
-            screenshot_path = str(screenshot)  # This is an absolute path.
+        screenshot_path = f"/{screenshot}" if relative_to_repo else str(screenshot)
 
         if output_format == "markdown":
             click.echo(f"![{screenshot.name}]({screenshot_path})")
