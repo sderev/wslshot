@@ -175,8 +175,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "click" },
-    { name = "click-default-group" },
+    { name = "click", specifier = ">=8.3.0,<9.0" },
+    { name = "click-default-group", specifier = ">=1.2.4,<2.0" },
     { name = "pytest", marker = "extra == 'dev'" },
 ]
 provides-extras = ["dev"]
