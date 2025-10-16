@@ -674,7 +674,7 @@ def configure(source, destination, auto_stage_enabled, output_format):
     - For VM users, you should configure a shared folder between Windows and the VM before proceeding.
     """
     # When no options are specified, ask the user for their preferences.
-    if not any((source, destination, auto_stage_enabled, output_format)):
+    if all(x is None for x in (source, destination, auto_stage_enabled, output_format)):
         write_config(get_config_file_path())
 
     # Otherwise, set the specified options.
