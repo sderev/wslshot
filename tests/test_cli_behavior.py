@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import List
 from uuid import UUID
 
 import pytest
@@ -50,7 +49,7 @@ def test_stage_screenshots_uses_repo_root(monkeypatch: pytest.MonkeyPatch, tmp_p
     git_root = tmp_path / "repo"
     git_root.mkdir()
 
-    received: List[Path] = []
+    received: list[Path] = []
 
     def fake_run(cmd, check, cwd):
         received.append(Path(cwd))

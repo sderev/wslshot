@@ -22,7 +22,7 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import click
 from click_default_group import DefaultGroup
@@ -133,8 +133,8 @@ def fetch(source, destination, count, output_format, image_path):
         source_screenshots = get_screenshots(source, count)
         copied_screenshots = copy_screenshots(source_screenshots, destination)
 
-    relative_screenshots: Tuple[Path, ...] = ()
-    git_root: Optional[Path] = None
+    relative_screenshots: tuple[Path, ...] = ()
+    git_root: Path | None = None
 
     if is_git_repo():
         try:
@@ -153,7 +153,7 @@ def fetch(source, destination, count, output_format, image_path):
         print_formatted_path(output_format, copied_screenshots, relative_to_repo=False)
 
 
-def get_screenshots(source: str, count: int) -> Tuple[Path, ...]:
+def get_screenshots(source: str, count: int) -> tuple[Path, ...]:
     """
     Get the most recent screenshot(s) from the source directory.
 
@@ -195,7 +195,7 @@ def get_screenshots(source: str, count: int) -> Tuple[Path, ...]:
     return tuple(screenshots)
 
 
-def copy_screenshots(screenshots: Tuple[Path, ...], destination: str) -> Tuple[Path, ...]:
+def copy_screenshots(screenshots: tuple[Path, ...], destination: str) -> tuple[Path, ...]:
     """
     Copy the screenshot(s) to the destination directory
     and rename them with unique filesystem-friendly names.
@@ -207,7 +207,7 @@ def copy_screenshots(screenshots: Tuple[Path, ...], destination: str) -> Tuple[P
     Returns:
     - A tuple of Path objects representing the new locations of the copied screenshot(s).
     """
-    copied_screenshots: Tuple[Path, ...] = ()
+    copied_screenshots: tuple[Path, ...] = ()
 
     for screenshot in screenshots:
         new_screenshot_name = generate_screenshot_name(screenshot)
@@ -231,7 +231,7 @@ def generate_screenshot_name(screenshot_path: Path) -> str:
     return f"screenshot_{unique_fragment}{suffix}"
 
 
-def stage_screenshots(screenshots: Tuple[Path, ...], git_root: Path) -> None:
+def stage_screenshots(screenshots: tuple[Path, ...], git_root: Path) -> None:
     """
     Automatically stage the screenshot(s) if the destination is a Git repo.
 
@@ -252,8 +252,8 @@ def stage_screenshots(screenshots: Tuple[Path, ...], git_root: Path) -> None:
 
 
 def format_screenshots_path_for_git(
-    screenshots: Tuple[Path, ...], git_root: Path
-) -> Tuple[Path, ...]:
+    screenshots: tuple[Path, ...], git_root: Path
+) -> tuple[Path, ...]:
     """
     Format the screenshot(s)'s path for git.
 
@@ -261,7 +261,7 @@ def format_screenshots_path_for_git(
 
     - screenshots: The screenshot(s).
     """
-    formatted_screenshots: Tuple[Path, ...] = ()
+    formatted_screenshots: tuple[Path, ...] = ()
 
     for screenshot in screenshots:
         try:
@@ -273,7 +273,7 @@ def format_screenshots_path_for_git(
 
 
 def print_formatted_path(
-    output_format: str, screenshots: Tuple[Path, ...], *, relative_to_repo: bool
+    output_format: str, screenshots: tuple[Path, ...], *, relative_to_repo: bool
 ) -> None:
     """
     Print the screenshot(s)'s path in the specified format.
@@ -316,7 +316,7 @@ def get_config_file_path() -> Path:
     return config_file_path
 
 
-def read_config(config_file_path: Path) -> Dict[str, Any]:
+def read_config(config_file_path: Path) -> dict[str, Any]:
     """
     Read the configuration file.
 
