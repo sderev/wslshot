@@ -311,7 +311,15 @@ def get_config_file_path() -> Path:
 
     if not config_file_path.exists():
         config_file_path.touch(mode=0o600)
-        write_config(config_file_path)
+        # Write default config without interactive prompts
+        default_config = {
+            "default_source": "",
+            "default_destination": "",
+            "auto_stage_enabled": False,
+            "default_output_format": "markdown"
+        }
+        with open(config_file_path, "w", encoding="UTF-8") as file:
+            json.dump(default_config, file, indent=4)
 
     return config_file_path
 
