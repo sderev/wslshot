@@ -1,0 +1,1161 @@
+"""
+Comprehensive integration tests for the wslshot fetch command.
+
+These tests verify the main CLI command behavior including:
+- Basic fetch operations with different options
+- Image path argument handling
+- Source/destination validation
+- Output format validation
+- Git integration scenarios
+- Screenshot fetching logic
+- Output formatting verification
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
+from click.testing import CliRunner
+from wslshot import cli
+
+
+# ============================================================================
+# Fixtures and Helpers
+# ============================================================================
+
+
+@pytest.fixture
+def runner() -> CliRunner:
+    """Provide a Click test runner."""
+    return CliRunner()
+
+
+@pytest.fixture
+def source_dir(tmp_path: Path) -> Path:
+    """Create a source directory with test screenshots."""
+    source = tmp_path / "source"
+    source.mkdir()
+    return source
+
+
+@pytest.fixture
+def dest_dir(tmp_path: Path) -> Path:
+    """Create a destination directory."""
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    return dest
+
+
+@pytest.fixture
+def config_file(fake_home: Path) -> Path:
+    """Create a config file with default settings."""
+    config_path = fake_home / ".config" / "wslshot" / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "default_source": "",
+                "default_destination": "",
+                "auto_stage_enabled": False,
+                "default_output_format": "markdown",
+            }
+        )
+    )
+    return config_path
+
+
+def create_screenshot(directory: Path, name: str) -> Path:
+    """Create a fake screenshot file."""
+    screenshot = directory / name
+    screenshot.write_bytes(b"fake image data")
+    return screenshot
+
+
+# ============================================================================
+# 1. Basic Fetch Operations
+# ============================================================================
+
+
+def test_fetch_with_default_settings(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test fetch with default settings from config."""
+    # Update config with default directories
+    config_file.write_text(
+        json.dumps(
+            {
+                "default_source": str(source_dir),
+                "default_destination": str(dest_dir),
+                "auto_stage_enabled": False,
+                "default_output_format": "markdown",
+            }
+        )
+    )
+
+    create_screenshot(source_dir, "screenshot.png")
+
+    # Mock is_git_repo to False so it uses config default_destination
+    monkeypatch.setattr(cli, "is_git_repo", lambda: False)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert "![screenshot_" in result.output
+    assert str(dest_dir) in result.output
+
+
+def test_fetch_with_custom_source(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch command with custom --source."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert "![screenshot_" in result.output
+
+
+def test_fetch_with_custom_destination(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch command with custom --destination."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert str(dest_dir) in result.output
+
+
+def test_fetch_with_count_3(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with --count 3."""
+    # Create 3 screenshots with different timestamps
+    for i in range(3):
+        screenshot = create_screenshot(source_dir, f"screenshot_{i}.png")
+        # Touch to ensure different modification times
+        screenshot.touch()
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir), "--count", "3"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Should output 3 lines (one for each screenshot)
+    output_lines = [line for line in result.output.strip().split("\n") if line]
+    assert len(output_lines) == 3
+
+
+def test_fetch_with_output_format_markdown(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with --output-format markdown."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-format",
+            "markdown",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert "![screenshot_" in result.output
+    assert "](" in result.output
+
+
+def test_fetch_with_output_format_html(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with --output-format html."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-format",
+            "html",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert '<img src="' in result.output
+    assert 'alt="screenshot_' in result.output
+
+
+def test_fetch_with_output_format_plain_text(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with --output-format plain_text."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-format",
+            "plain_text",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Plain text should just show the path
+    assert str(dest_dir) in result.output
+    # Should not contain markdown or html formatting
+    assert "![" not in result.output
+    assert "<img" not in result.output
+
+
+def test_fetch_with_all_options_combined(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with all options combined."""
+    create_screenshot(source_dir, "screenshot1.png")
+    create_screenshot(source_dir, "screenshot2.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--count",
+            "2",
+            "--output-format",
+            "html",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert '<img src="' in result.output
+
+
+def test_fetch_default_count_is_1(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test default count is 1."""
+    create_screenshot(source_dir, "screenshot1.png")
+    create_screenshot(source_dir, "screenshot2.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Should only output 1 line
+    output_lines = [line for line in result.output.strip().split("\n") if line]
+    assert len(output_lines) == 1
+
+
+# ============================================================================
+# 2. Image Path Argument
+# ============================================================================
+
+
+def test_fetch_with_direct_png_path(
+    runner: CliRunner,
+    fake_home: Path,
+    tmp_path: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with direct PNG path."""
+    image = create_screenshot(tmp_path, "myimage.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--destination", str(dest_dir), str(image)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert "![screenshot_" in result.output
+
+
+def test_fetch_with_direct_jpg_path(
+    runner: CliRunner,
+    fake_home: Path,
+    tmp_path: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with direct JPG path."""
+    image = create_screenshot(tmp_path, "myimage.jpg")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--destination", str(dest_dir), str(image)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert "![screenshot_" in result.output
+
+
+def test_fetch_with_direct_gif_path(
+    runner: CliRunner,
+    fake_home: Path,
+    tmp_path: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with direct GIF path."""
+    image = create_screenshot(tmp_path, "myimage.gif")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--destination", str(dest_dir), str(image)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # GIF files should use 'animated_' prefix
+    assert "![animated_" in result.output
+
+
+def test_fetch_with_direct_jpeg_path(
+    runner: CliRunner,
+    fake_home: Path,
+    tmp_path: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with direct JPEG path."""
+    image = create_screenshot(tmp_path, "myimage.jpeg")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--destination", str(dest_dir), str(image)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert "![screenshot_" in result.output
+
+
+def test_fetch_rejects_txt_file(
+    runner: CliRunner,
+    fake_home: Path,
+    tmp_path: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test rejects .txt file (invalid format)."""
+    text_file = tmp_path / "file.txt"
+    text_file.write_text("not an image")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--destination", str(dest_dir), str(text_file)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 1
+    assert "Invalid image format" in result.output
+
+
+def test_fetch_rejects_pdf_file(
+    runner: CliRunner,
+    fake_home: Path,
+    tmp_path: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test rejects .pdf file (invalid format)."""
+    pdf_file = tmp_path / "file.pdf"
+    pdf_file.write_bytes(b"fake pdf data")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--destination", str(dest_dir), str(pdf_file)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 1
+    assert "Invalid image format" in result.output
+
+
+def test_fetch_handles_uppercase_extensions(
+    runner: CliRunner,
+    fake_home: Path,
+    tmp_path: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test handles uppercase extensions (.PNG, .GIF)."""
+    png_image = create_screenshot(tmp_path, "image.PNG")
+    result_png = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--destination", str(dest_dir), str(png_image)],
+        env={"HOME": str(fake_home)},
+    )
+    assert result_png.exit_code == 0
+
+    gif_image = create_screenshot(tmp_path, "image.GIF")
+    result_gif = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--destination", str(dest_dir), str(gif_image)],
+        env={"HOME": str(fake_home)},
+    )
+    assert result_gif.exit_code == 0
+
+
+def test_fetch_error_message_for_unsupported_format(
+    runner: CliRunner,
+    fake_home: Path,
+    tmp_path: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test error message for unsupported format."""
+    unsupported_file = tmp_path / "file.bmp"
+    unsupported_file.write_bytes(b"fake bmp data")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--destination", str(dest_dir), str(unsupported_file)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 1
+    assert "Invalid image format" in result.output
+    assert "supported formats: png, jpg, jpeg, gif" in result.output
+
+
+# ============================================================================
+# 3. Source/Destination Validation
+# ============================================================================
+
+
+def test_fetch_exits_when_source_does_not_exist(
+    runner: CliRunner,
+    fake_home: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test exits with code 1 when source doesn't exist."""
+    nonexistent_source = "/nonexistent/source/directory"
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", nonexistent_source, "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 1
+
+
+def test_fetch_error_message_mentions_source_directory(
+    runner: CliRunner,
+    fake_home: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test error message mentions source directory."""
+    nonexistent_source = "/nonexistent/source/directory"
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", nonexistent_source, "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 1
+    assert "Source directory" in result.output
+    assert "does not exist" in result.output
+
+
+def test_fetch_exits_when_destination_does_not_exist(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test exits with code 1 when destination doesn't exist."""
+    create_screenshot(source_dir, "screenshot.png")
+    nonexistent_dest = "/nonexistent/dest/directory"
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", nonexistent_dest],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 1
+
+
+def test_fetch_error_message_mentions_destination_directory(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test error message mentions destination directory."""
+    create_screenshot(source_dir, "screenshot.png")
+    nonexistent_dest = "/nonexistent/dest/directory"
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", nonexistent_dest],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 1
+    assert "Destination directory" in result.output
+    assert "does not exist" in result.output
+
+
+# ============================================================================
+# 4. Output Format Validation
+# ============================================================================
+
+
+def test_fetch_exits_for_invalid_output_format(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test exits with code 1 for invalid output format."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-format",
+            "invalid",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 1
+
+
+def test_fetch_case_insensitive_format_matching(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test case-insensitive format matching (HTML, html, Html all work)."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    for format_variant in ["HTML", "html", "Html", "HtMl"]:
+        result = runner.invoke(
+            cli.wslshot,
+            [
+                "fetch",
+                "--source",
+                str(source_dir),
+                "--destination",
+                str(dest_dir),
+                "--output-format",
+                format_variant,
+            ],
+            env={"HOME": str(fake_home)},
+        )
+
+        assert result.exit_code == 0, f"Failed for format: {format_variant}"
+        assert '<img src="' in result.output
+
+
+def test_fetch_error_lists_valid_options(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test error lists valid options: markdown, html, plain_text."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-format",
+            "xml",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 1
+    assert "markdown" in result.output
+    assert "html" in result.output
+    assert "plain_text" in result.output
+
+
+# ============================================================================
+# 5. Git Integration
+# ============================================================================
+
+
+def test_fetch_stages_files_when_auto_stage_enabled_and_in_git_repo(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test stages files when auto_stage_enabled=True and in git repo."""
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    dest_dir = repo_root / "images"
+    dest_dir.mkdir()
+
+    create_screenshot(source_dir, "screenshot.png")
+
+    # Enable auto-staging in config
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    config_file.write_text(
+        json.dumps(
+            {
+                "default_source": "",
+                "default_destination": "",
+                "auto_stage_enabled": True,
+                "default_output_format": "markdown",
+            }
+        )
+    )
+
+    # Track git add calls
+    git_add_calls = []
+
+    def fake_subprocess_run(cmd, check=False, cwd=None, **kwargs):
+        if cmd[:2] == ["git", "add"]:
+            git_add_calls.append({"cmd": cmd, "cwd": cwd})
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
+    monkeypatch.setattr(cli, "is_git_repo", lambda: True)
+    monkeypatch.setattr(cli, "get_git_root", lambda: repo_root)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert len(git_add_calls) == 1
+    assert git_add_calls[0]["cwd"] == repo_root
+
+
+def test_fetch_skips_staging_when_auto_stage_disabled(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test skips staging when auto_stage_enabled=False."""
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    dest_dir = repo_root / "images"
+    dest_dir.mkdir()
+
+    create_screenshot(source_dir, "screenshot.png")
+
+    # Disable auto-staging in config
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    config_file.write_text(
+        json.dumps(
+            {
+                "default_source": "",
+                "default_destination": "",
+                "auto_stage_enabled": False,
+                "default_output_format": "markdown",
+            }
+        )
+    )
+
+    # Track git add calls
+    git_add_calls = []
+
+    def fake_subprocess_run(cmd, check=False, cwd=None, **kwargs):
+        if cmd[:2] == ["git", "add"]:
+            git_add_calls.append({"cmd": cmd, "cwd": cwd})
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
+    monkeypatch.setattr(cli, "is_git_repo", lambda: True)
+    monkeypatch.setattr(cli, "get_git_root", lambda: repo_root)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert len(git_add_calls) == 0
+
+
+def test_fetch_uses_relative_paths_when_in_git_repo(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test uses relative paths when in git repo."""
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    dest_dir = repo_root / "images"
+    dest_dir.mkdir()
+
+    create_screenshot(source_dir, "screenshot.png")
+
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    config_file.write_text(
+        json.dumps(
+            {
+                "default_source": "",
+                "default_destination": "",
+                "auto_stage_enabled": False,
+                "default_output_format": "markdown",
+            }
+        )
+    )
+
+    monkeypatch.setattr(cli, "is_git_repo", lambda: True)
+    monkeypatch.setattr(cli, "get_git_root", lambda: repo_root)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Relative paths should start with / when in git repo
+    assert "](/images/screenshot_" in result.output or "](/images/animated_" in result.output
+
+
+def test_fetch_uses_absolute_paths_when_not_in_git_repo(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test uses absolute paths when not in git repo."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    monkeypatch.setattr(cli, "is_git_repo", lambda: False)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Absolute paths should contain the full destination directory
+    assert str(dest_dir) in result.output
+
+
+def test_fetch_skips_staging_when_destination_outside_repo(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test skips staging when destination is outside repo."""
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    dest_dir = tmp_path / "outside_repo"
+    dest_dir.mkdir()
+
+    create_screenshot(source_dir, "screenshot.png")
+
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    config_file.write_text(
+        json.dumps(
+            {
+                "default_source": "",
+                "default_destination": "",
+                "auto_stage_enabled": True,
+                "default_output_format": "markdown",
+            }
+        )
+    )
+
+    # Track git add calls
+    git_add_calls = []
+
+    def fake_subprocess_run(cmd, check=False, cwd=None, **kwargs):
+        if cmd[:2] == ["git", "add"]:
+            git_add_calls.append({"cmd": cmd, "cwd": cwd})
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
+    monkeypatch.setattr(cli, "is_git_repo", lambda: True)
+    monkeypatch.setattr(cli, "get_git_root", lambda: repo_root)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Should not stage files outside the repo
+    assert len(git_add_calls) == 0
+    # Should use absolute paths since destination is outside repo
+    assert str(dest_dir) in result.output
+
+
+def test_fetch_handles_get_git_root_error_gracefully(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test handles get_git_root() RuntimeError gracefully."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    monkeypatch.setattr(cli, "is_git_repo", lambda: True)
+    monkeypatch.setattr(
+        cli, "get_git_root", lambda: (_ for _ in ()).throw(RuntimeError("Git root not found"))
+    )
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    # Should still succeed but show error message
+    assert result.exit_code == 0
+    # Should fall back to absolute paths
+    assert str(dest_dir) in result.output
+
+
+# ============================================================================
+# 6. Screenshot Fetching
+# ============================================================================
+
+
+def test_fetch_fetches_most_recent_screenshot(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetches most recent screenshot."""
+    import time
+
+    old_screenshot = create_screenshot(source_dir, "old.png")
+    time.sleep(0.01)  # Ensure different modification times
+    recent_screenshot = create_screenshot(source_dir, "recent.png")
+
+    # Verify recent is actually newer
+    assert recent_screenshot.stat().st_mtime > old_screenshot.stat().st_mtime
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Should copy exactly one file (the most recent)
+    copied_files = list(dest_dir.glob("screenshot_*.png"))
+    assert len(copied_files) == 1
+
+
+def test_fetch_fetches_n_most_recent_when_count_n(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetches N most recent when count=N."""
+    import time
+
+    for i in range(5):
+        create_screenshot(source_dir, f"screenshot_{i}.png")
+        time.sleep(0.01)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir), "--count", "3"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Should copy exactly 3 files
+    copied_files = list(dest_dir.glob("screenshot_*.png"))
+    assert len(copied_files) == 3
+
+
+def test_fetch_exits_when_no_screenshots_found(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test exits when no screenshots found."""
+    # Empty source directory
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 1
+    assert "No screenshot found" in result.output
+
+
+def test_fetch_exits_when_requested_count_exceeds_available(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test exits when requested count > available."""
+    create_screenshot(source_dir, "screenshot1.png")
+    create_screenshot(source_dir, "screenshot2.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir), "--count", "5"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 1
+    assert "You requested 5 screenshot(s), but only 2 were found" in result.output
+
+
+# ============================================================================
+# 7. Output Verification
+# ============================================================================
+
+
+def test_fetch_stdout_contains_formatted_path(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test stdout contains formatted path."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert result.output.strip()  # Should have output
+    assert "screenshot_" in result.output
+
+
+def test_fetch_markdown_format_in_output(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test markdown format in output."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-format",
+            "markdown",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert result.output.startswith("![screenshot_")
+    assert "](" in result.output
+
+
+def test_fetch_html_format_in_output(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test HTML format in output."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-format",
+            "html",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert result.output.startswith("<img src=")
+    assert 'alt="screenshot_' in result.output
+
+
+def test_fetch_plain_text_format_in_output(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test plain_text format in output."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-format",
+            "plain_text",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Should contain the path, but no markdown or HTML formatting
+    assert str(dest_dir) in result.output
+    assert "![" not in result.output
+    assert "<img" not in result.output
+
+
+def test_fetch_exit_code_0_on_success(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test exit code 0 on success."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
