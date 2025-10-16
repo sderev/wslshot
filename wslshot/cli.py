@@ -288,13 +288,13 @@ def print_formatted_path(
         # This is because the screenshot path is relative to the git repo's.
         screenshot_path = f"/{screenshot}" if relative_to_repo else str(screenshot)
 
-        if output_format == "markdown":
+        if output_format.casefold() == "markdown":
             click.echo(f"![{screenshot.name}]({screenshot_path})")
 
-        elif output_format == "html":
+        elif output_format.casefold() == "html":
             click.echo(f'<img src="{screenshot_path}" alt="{screenshot.name}">')
 
-        elif output_format == "plain_text":
+        elif output_format.casefold() == "plain_text":
             click.echo(screenshot_path)
 
         else:
