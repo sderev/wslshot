@@ -17,15 +17,56 @@ For detailed usage instructions, use 'wslshot --help' or 'wslshot [command] --he
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Any
 
 import click
 from click_default_group import DefaultGroup
+
+
+def atomic_write_json(path: Path, data: dict, mode: int = 0o600) -> None:
+    """
+    Write JSON data atomically to prevent corruption.
+
+    The temp file is created in the same directory as the target file
+    to ensure atomic rename (same filesystem). On POSIX systems,
+    os.replace() is atomic.
+
+    Args:
+        path: Path to target file
+        data: Dictionary to write as JSON
+        mode: File permissions (default 0o600)
+
+    Raises:
+        OSError: If write fails
+    """
+    # Create temp file in same directory (ensures same filesystem)
+    temp_fd, temp_path = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}_", suffix=".tmp")
+
+    try:
+        # Write to temp file
+        with os.fdopen(temp_fd, "w", encoding="UTF-8") as f:
+            json.dump(data, f, indent=4)
+
+        # Set permissions on temp file
+        os.chmod(temp_path, mode)
+
+        # Atomic rename (POSIX guarantees atomicity)
+        os.replace(temp_path, str(path))
+
+    except Exception:
+        # Cleanup temp file on any error
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
 
 
 @click.group(cls=DefaultGroup, default="fetch", default_if_no_args=True)

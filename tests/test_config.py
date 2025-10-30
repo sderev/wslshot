@@ -807,3 +807,123 @@ class TestGetValidatedInput:
         )
 
         assert result == "MARKDOWN"
+
+
+class TestAtomicWriteJson:
+    """Tests for atomic_write_json() function."""
+
+    def test_atomic_write_json_creates_file(self, tmp_path: Path) -> None:
+        """Test that atomic_write_json creates a new file."""
+        config_file = tmp_path / "config.json"
+        test_data = {"key": "value", "number": 42}
+
+        cli.atomic_write_json(config_file, test_data, mode=0o600)
+
+        assert config_file.exists()
+        with open(config_file, "r", encoding="UTF-8") as f:
+            result = json.load(f)
+        assert result == test_data
+
+    def test_atomic_write_json_sets_permissions(self, tmp_path: Path) -> None:
+        """Test that atomic_write_json sets file permissions correctly."""
+        config_file = tmp_path / "config.json"
+        test_data = {"key": "value"}
+
+        cli.atomic_write_json(config_file, test_data, mode=0o600)
+
+        # Check file permissions
+        assert (config_file.stat().st_mode & 0o777) == 0o600
+
+    def test_atomic_write_json_overwrites_existing_file(self, tmp_path: Path) -> None:
+        """Test that atomic_write_json overwrites an existing file atomically."""
+        config_file = tmp_path / "config.json"
+
+        # Write initial data
+        initial_data = {"old_key": "old_value"}
+        cli.atomic_write_json(config_file, initial_data, mode=0o600)
+
+        # Overwrite with new data
+        new_data = {"new_key": "new_value", "another": 123}
+        cli.atomic_write_json(config_file, new_data, mode=0o600)
+
+        # Verify new data is written
+        with open(config_file, "r", encoding="UTF-8") as f:
+            result = json.load(f)
+        assert result == new_data
+        assert "old_key" not in result
+
+    def test_atomic_write_json_crash_simulation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that crashes during write don't corrupt file."""
+        config_file = tmp_path / "config.json"
+
+        # Write initial config
+        initial_config = {"key": "value1"}
+        cli.atomic_write_json(config_file, initial_config, mode=0o600)
+
+        # Simulate crash during write by mocking os.replace
+        call_count = [0]
+        original_replace = cli.os.replace
+
+        def crashing_replace(*args):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise OSError("Simulated crash")
+            return original_replace(*args)
+
+        monkeypatch.setattr(cli.os, "replace", crashing_replace)
+
+        # Attempt write that will crash
+        with pytest.raises(OSError, match="Simulated crash"):
+            cli.atomic_write_json(config_file, {"key": "value2"}, mode=0o600)
+
+        # Verify original file still intact and valid
+        with open(config_file, "r", encoding="UTF-8") as f:
+            recovered_config = json.load(f)
+
+        assert recovered_config == initial_config  # Not corrupted!
+
+    def test_atomic_write_json_cleanup_on_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that temp files are cleaned up on failure."""
+        config_file = tmp_path / "config.json"
+
+        # Mock json.dump to fail
+        def failing_dump(*args, **kwargs):
+            raise ValueError("Simulated write failure")
+
+        monkeypatch.setattr(json, "dump", failing_dump)
+
+        # Attempt write that will fail
+        with pytest.raises(ValueError, match="Simulated write failure"):
+            cli.atomic_write_json(config_file, {"key": "value"}, mode=0o600)
+
+        # Verify no temp files left in directory
+        temp_files = list(tmp_path.glob(".config.json_*.tmp"))
+        assert len(temp_files) == 0
+
+    def test_atomic_write_json_preserves_json_format(self, tmp_path: Path) -> None:
+        """Test that atomic_write_json writes properly formatted JSON."""
+        config_file = tmp_path / "config.json"
+        test_data = {
+            "default_source": "/path/to/source",
+            "default_destination": "/path/to/dest",
+            "auto_stage_enabled": True,
+            "default_output_format": "markdown",
+        }
+
+        cli.atomic_write_json(config_file, test_data, mode=0o600)
+
+        # Read raw file content to verify formatting
+        with open(config_file, "r", encoding="UTF-8") as f:
+            content = f.read()
+
+        # Verify it's valid JSON with proper indentation
+        assert content.count("\n") > 4  # Multi-line JSON
+        assert "    " in content  # Indented (4 spaces)
+
+        # Verify it can be parsed back
+        parsed = json.loads(content)
+        assert parsed == test_data
