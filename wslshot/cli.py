@@ -24,6 +24,7 @@ import subprocess
 import sys
 import tempfile
 import uuid
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -102,7 +103,7 @@ def wslshot():
     "--output-format",
     "-f",
     help=(
-        "Specify the output format (markdown, html, plain_text). Overrides the default set in config."
+        "Specify the output format (markdown, html, text). Overrides the default set in config."
     ),
 )
 @click.argument("image_path", type=click.Path(exists=True), required=False)
@@ -149,9 +150,19 @@ def fetch(source, destination, count, output_format, image_path):
     if output_format is None:
         output_format = config["default_output_format"]
 
-    if output_format.casefold() not in ("markdown", "html", "plain_text"):
-        click.echo(f"Invalid output format: {output_format}")
-        click.echo("Valid options are: markdown, html, plain_text")
+    # Emit deprecation warning for plain_text
+    if output_format.casefold() == "plain_text":
+        warnings.warn(
+            "The 'plain_text' output format is deprecated and will be removed in v1.0.0. "
+            "Use 'text' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        output_format = "text"  # Normalize to new name
+
+    if output_format.casefold() not in ("markdown", "html", "text", "plain_text"):
+        click.echo(f"Invalid output format: {output_format}", err=True)
+        click.echo("Valid options are: markdown, html, text", err=True)
         sys.exit(1)
 
     # If the user specified an image path, copy it to the destination directory.
@@ -338,7 +349,7 @@ def print_formatted_path(
         elif output_format.casefold() == "html":
             click.echo(f'<img src="{screenshot_path}" alt="{screenshot.name}">')
 
-        elif output_format.casefold() == "plain_text":
+        elif output_format.casefold() in ("plain_text", "text"):
             click.echo(screenshot_path)
 
         else:
@@ -423,7 +434,7 @@ def write_config(config_file_path: Path) -> None:
             False,
         ),
         "default_output_format": (
-            "Enter the default output format (markdown, html, plain_text)",
+            "Enter the default output format (markdown, html, text)",
             "markdown",
         ),
     }
@@ -441,7 +452,7 @@ def write_config(config_file_path: Path) -> None:
                 message,
                 current_config,
                 default,
-                options=["markdown", "html", "plain_text"],
+                options=["markdown", "html", "text", "plain_text"],
             )
         else:
             config[field] = get_config_input(field, message, current_config, default)
@@ -661,14 +672,16 @@ def set_default_output_format(output_format: str) -> None:
     Args:
         output_format: The default output format.
     """
-    if output_format.casefold() not in ["markdown", "html", "plain_text"]:
+    if output_format.casefold() not in ["markdown", "html", "text", "plain_text"]:
         click.echo(click.style(f"Invalid output format: {output_format}", fg="red"), err=True)
-        click.echo("Valid options are: markdown, html, plain_text", err=True)
+        click.echo("Valid options are: markdown, html, text", err=True)
         sys.exit(1)
 
     config_file_path = get_config_file_path()
     config = read_config(config_file_path)
-    config["default_output_format"] = output_format.casefold()
+    # Normalize plain_text to text when storing
+    normalized_format = output_format.casefold().replace("plain_text", "text")
+    config["default_output_format"] = normalized_format
 
     atomic_write_json(config_file_path, config)
 
@@ -688,7 +701,7 @@ def set_default_output_format(output_format: str) -> None:
 @click.option(
     "--output-format",
     "-f",
-    help="Set the default output format (markdown, HTML, plain_text).",
+    help="Set the default output format (markdown, HTML, text).",
 )
 def configure(source, destination, auto_stage_enabled, output_format):
     """
@@ -700,7 +713,7 @@ def configure(source, destination, auto_stage_enabled, output_format):
 
     - Control whether screenshots are automatically staged with --auto-stage.
 
-    - Set the default output format (markdown, HTML, plain_text) with --output-format.
+    - Set the default output format (markdown, HTML, text) with --output-format.
 
     ___
 

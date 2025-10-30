@@ -197,6 +197,25 @@ def test_configure_output_format_html(fake_home: Path) -> None:
     assert updated_config["default_output_format"] == "html"
 
 
+def test_configure_output_format_plain_text(fake_home: Path) -> None:
+    """Test configure --output-format plain_text updates config (normalizes to text)."""
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    create_default_config(config_file)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.wslshot,
+        ["configure", "--output-format", "plain_text"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+
+    # Verify config was updated
+    updated_config = json.loads(config_file.read_text())
+    assert updated_config["default_output_format"] == "text"
+
+
 def test_configure_output_format_case_insensitive(fake_home: Path) -> None:
     """Test configure --output-format accepts case-insensitive values."""
     config_file = fake_home / ".config" / "wslshot" / "config.json"
@@ -214,6 +233,23 @@ def test_configure_output_format_case_insensitive(fake_home: Path) -> None:
     # Verify config was updated with lowercase value
     updated_config = json.loads(config_file.read_text())
     assert updated_config["default_output_format"] == "html"
+
+
+def test_configure_output_format_with_invalid_value(fake_home: Path) -> None:
+    """Test configure --output-format exits with error for invalid value."""
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    create_default_config(config_file)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.wslshot,
+        ["configure", "--output-format", "invalid"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 1
+    assert "Invalid output format" in result.output
+    assert "markdown, html, text" in result.output
 
 
 def test_configure_with_multiple_options(fake_home: Path, tmp_path: Path) -> None:
