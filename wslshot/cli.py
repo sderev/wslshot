@@ -71,6 +71,25 @@ def atomic_write_json(path: Path, data: dict, mode: int = 0o600) -> None:
         raise
 
 
+def suggest_format(invalid_format: str, valid_formats: list[str]) -> str:
+    """Suggest a similar format if user provides invalid input."""
+    invalid_lower = invalid_format.lower()
+
+    # Simple similarity check
+    suggestions = []
+    for fmt in valid_formats:
+        if invalid_lower in fmt or fmt in invalid_lower:
+            suggestions.append(fmt)
+        elif len(invalid_lower) > 2 and any(
+            invalid_lower[i : i + 2] in fmt for i in range(len(invalid_lower) - 1)
+        ):
+            suggestions.append(fmt)
+
+    if suggestions:
+        return f"Did you mean: {', '.join(suggestions)}?"
+    return ""
+
+
 @click.group(cls=DefaultGroup, default="fetch", default_if_no_args=True)
 @click.version_option(package_name="wslshot")
 def wslshot():
@@ -163,6 +182,9 @@ def fetch(source, destination, count, output_format, image_path):
     if output_format.casefold() not in ("markdown", "html", "text", "plain_text"):
         click.echo(f"Invalid output format: {output_format}", err=True)
         click.echo("Valid options are: markdown, html, text", err=True)
+        suggestion = suggest_format(output_format, ["markdown", "html", "text"])
+        if suggestion:
+            click.echo(suggestion, err=True)
         sys.exit(1)
 
     # If the user specified an image path, copy it to the destination directory.
@@ -675,6 +697,9 @@ def set_default_output_format(output_format: str) -> None:
     if output_format.casefold() not in ["markdown", "html", "text", "plain_text"]:
         click.echo(click.style(f"Invalid output format: {output_format}", fg="red"), err=True)
         click.echo("Valid options are: markdown, html, text", err=True)
+        suggestion = suggest_format(output_format, ["markdown", "html", "text"])
+        if suggestion:
+            click.echo(click.style(suggestion, fg="yellow"), err=True)
         sys.exit(1)
 
     config_file_path = get_config_file_path()
