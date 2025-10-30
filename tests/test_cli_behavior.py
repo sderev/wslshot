@@ -132,3 +132,106 @@ def test_fetch_rejects_non_positive_count(monkeypatch: pytest.MonkeyPatch) -> No
 
     assert result.exit_code != 0
     assert "Invalid value for '--count'" in result.output
+
+
+# Edge case tests added below
+
+
+def test_generate_screenshot_name_uppercase_jpg(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that uppercase .JPG extension is normalized to lowercase."""
+    fake_uuid = UUID("abcdefab-1234-5678-abcd-1234567890ab")
+    monkeypatch.setattr(cli.uuid, "uuid4", lambda: fake_uuid)
+
+    image_path = Path("/tmp/source/Screenshot.JPG")
+    result = cli.generate_screenshot_name(image_path)
+
+    assert result == f"screenshot_{fake_uuid.hex}.jpg"
+    assert result.endswith(".jpg")  # Verify lowercase
+
+
+def test_generate_screenshot_name_uppercase_jpeg(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that uppercase .JPEG extension is normalized to lowercase."""
+    fake_uuid = UUID("bbbbbbbb-2222-3333-4444-555555555555")
+    monkeypatch.setattr(cli.uuid, "uuid4", lambda: fake_uuid)
+
+    image_path = Path("/tmp/source/Photo.JPEG")
+    result = cli.generate_screenshot_name(image_path)
+
+    assert result == f"screenshot_{fake_uuid.hex}.jpeg"
+    assert result.endswith(".jpeg")
+
+
+def test_generate_screenshot_name_mixed_case_png(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that mixed case .PnG extension is normalized to lowercase."""
+    fake_uuid = UUID("cccccccc-3333-4444-5555-666666666666")
+    monkeypatch.setattr(cli.uuid, "uuid4", lambda: fake_uuid)
+
+    image_path = Path("/tmp/source/Image.PnG")
+    result = cli.generate_screenshot_name(image_path)
+
+    assert result == f"screenshot_{fake_uuid.hex}.png"
+    assert result.endswith(".png")
+
+
+def test_stage_screenshots_handles_git_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Test that staging continues gracefully when git add fails."""
+    from subprocess import CalledProcessError
+
+    git_root = tmp_path / "repo"
+    git_root.mkdir()
+
+    error_msgs: list[str] = []
+
+    def failing_run(cmd, **kwargs):
+        raise CalledProcessError(1, cmd)
+
+    def capture_echo(msg, **kwargs):
+        error_msgs.append(str(msg))
+
+    monkeypatch.setattr(cli.subprocess, "run", failing_run)
+    monkeypatch.setattr(cli.click, "echo", capture_echo)
+
+    # Should not raise exception
+    cli.stage_screenshots((Path("shot.png"),), git_root)
+
+    assert any("Failed to stage" in msg for msg in error_msgs)
+
+
+def test_format_screenshots_path_for_git_empty_tuple(tmp_path: Path) -> None:
+    """Test that empty tuple input returns empty tuple output."""
+    git_root = tmp_path / "repo"
+    git_root.mkdir()
+
+    result = cli.format_screenshots_path_for_git((), git_root)
+
+    assert result == ()
+
+
+def test_format_screenshots_path_for_git_all_outside_repo(tmp_path: Path) -> None:
+    """Test that all paths outside repo returns empty tuple."""
+    git_root = tmp_path / "repo"
+    git_root.mkdir()
+
+    outside1 = tmp_path / "other1" / "shot1.png"
+    outside1.parent.mkdir()
+    outside1.touch()
+
+    outside2 = tmp_path / "other2" / "shot2.png"
+    outside2.parent.mkdir()
+    outside2.touch()
+
+    result = cli.format_screenshots_path_for_git((outside1, outside2), git_root)
+
+    assert result == ()
+
+
+def test_copy_screenshots_empty_tuple(tmp_path: Path) -> None:
+    """Test that copy_screenshots with empty tuple returns empty tuple."""
+    destination = tmp_path / "dest"
+    destination.mkdir()
+
+    result = cli.copy_screenshots((), destination)
+
+    assert result == ()
