@@ -16,6 +16,7 @@ Features:
 For detailed usage instructions, use 'wslshot --help' or 'wslshot [command] --help'.
 """
 
+import heapq
 import json
 import os
 import shutil
@@ -211,11 +212,11 @@ def get_screenshots(source: str, count: int) -> tuple[Path, ...]:
         extensions = ("png", "jpg", "jpeg", "gif")
         screenshots = [file for ext in extensions for file in Path(source).glob(f"*.{ext}")]
 
-        # Sort by modification time
-        screenshots.sort(key=lambda file: file.stat().st_mtime, reverse=True)
-
-        # Take the `count` most recent files
-        screenshots = screenshots[:count]
+        # Cache stat results and use heapq for efficient partial sorting
+        # O(N log count) instead of O(N log N) full sort
+        file_stats = [(file, file.stat().st_mtime) for file in screenshots]
+        top_files = heapq.nlargest(count, file_stats, key=lambda x: x[1])
+        screenshots = [file for file, _ in top_files]
 
         if len(screenshots) == 0:
             raise ValueError("No screenshot found.")
@@ -277,19 +278,21 @@ def stage_screenshots(screenshots: tuple[Path, ...], git_root: Path) -> None:
     Automatically stage the screenshot(s) if the destination is a Git repo.
 
     Args:
-
     - screenshots: The screenshot(s).
+    - git_root: The git repository root path.
     """
-    # Automatically stage the screenshot(s) if the destination is a Git repo.
-    for screenshot in screenshots:
-        try:
-            subprocess.run(
-                ["git", "add", str(screenshot)],
-                check=True,
-                cwd=git_root,
-            )
-        except subprocess.CalledProcessError:
-            click.echo(f"Failed to stage screenshot '{screenshot}'.")
+    if not screenshots:
+        return
+
+    try:
+        # Batch all files into a single git add command
+        subprocess.run(
+            ["git", "add"] + [str(screenshot) for screenshot in screenshots],
+            check=True,
+            cwd=git_root,
+        )
+    except subprocess.CalledProcessError as e:
+        click.echo(f"Failed to stage screenshots: {e}", err=True)
 
 
 def format_screenshots_path_for_git(
