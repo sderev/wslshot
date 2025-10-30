@@ -119,14 +119,21 @@ def wslshot():
     help="Specify the number of most recent screenshots to fetch. Defaults to 1.",
 )
 @click.option(
+    "--output-style",
+    "output_format_new",
+    help=("Specify the output style (markdown, html, text). Overrides the default set in config."),
+)
+@click.option(
     "--output-format",
     "-f",
+    "output_format_deprecated",
     help=(
+        "[DEPRECATED - use --output-style] "
         "Specify the output format (markdown, html, text). Overrides the default set in config."
     ),
 )
 @click.argument("image_path", type=click.Path(exists=True), required=False)
-def fetch(source, destination, count, output_format, image_path):
+def fetch(source, destination, count, output_format_new, output_format_deprecated, image_path):
     """
     Fetches and copies the latest screenshot(s) from the source to the specified destination.
 
@@ -164,6 +171,17 @@ def fetch(source, destination, count, output_format, image_path):
             err=True,
         )
         sys.exit(1)
+
+    # Handle deprecated --output-format option
+    output_format = output_format_new or output_format_deprecated
+
+    if output_format_deprecated is not None:
+        warnings.warn(
+            "The --output-format/-f option is deprecated and will be removed in v1.0.0. "
+            "Use --output-style instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     # Output format
     if output_format is None:
