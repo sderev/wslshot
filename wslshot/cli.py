@@ -351,7 +351,6 @@ def get_config_file_path() -> Path:
     config_file_path.parent.mkdir(parents=True, exist_ok=True)
 
     if not config_file_path.exists():
-        config_file_path.touch(mode=0o600)
         # Write default config without interactive prompts
         default_config = {
             "default_source": "",
@@ -359,8 +358,7 @@ def get_config_file_path() -> Path:
             "auto_stage_enabled": False,
             "default_output_format": "markdown"
         }
-        with open(config_file_path, "w", encoding="UTF-8") as file:
-            json.dump(default_config, file, indent=4)
+        atomic_write_json(config_file_path, default_config, mode=0o600)
 
     return config_file_path
 
@@ -447,8 +445,7 @@ def write_config(config_file_path: Path) -> None:
 
     # Writing configuration to file
     try:
-        with open(config_file_path, "w", encoding="UTF-8") as file:
-            json.dump(config, file, indent=4)
+        atomic_write_json(config_file_path, config)
     except FileNotFoundError as error:
         click.echo(f"Failed to write configuration file: {error}", err=True)
         sys.exit(1)
@@ -536,8 +533,7 @@ def set_default_source(source_str: str) -> None:
     config = read_config(config_file_path)
     config["default_source"] = source
 
-    with open(config_file_path, "w", encoding="UTF-8") as file:
-        json.dump(config, file, indent=4)
+    atomic_write_json(config_file_path, config)
 
 
 def set_default_destination(destination_str: str) -> None:
@@ -557,8 +553,7 @@ def set_default_destination(destination_str: str) -> None:
     config = read_config(config_file_path)
     config["default_destination"] = destination
 
-    with open(config_file_path, "w", encoding="UTF-8") as file:
-        json.dump(config, file, indent=4)
+    atomic_write_json(config_file_path, config)
 
 
 def get_destination() -> Path:
@@ -653,8 +648,7 @@ def set_auto_stage(auto_stage_enabled: bool) -> None:
     config = read_config(config_file_path)
     config["auto_stage_enabled"] = auto_stage_enabled
 
-    with open(config_file_path, "w", encoding="UTF-8") as file:
-        json.dump(config, file, indent=4)
+    atomic_write_json(config_file_path, config)
 
 
 def set_default_output_format(output_format: str) -> None:
@@ -673,8 +667,7 @@ def set_default_output_format(output_format: str) -> None:
     config = read_config(config_file_path)
     config["default_output_format"] = output_format.casefold()
 
-    with open(config_file_path, "w", encoding="UTF-8") as file:
-        json.dump(config, file, indent=4)
+    atomic_write_json(config_file_path, config)
 
 
 @wslshot.command()
