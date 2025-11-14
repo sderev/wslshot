@@ -10,7 +10,7 @@ Features:
 - Specify the number of screenshots to be processed with the '--count' option.
 - Customize the source directory using '--source'.
 - Customize the destination directory using '--destination'.
-- Choose your preferred output format (Markdown, HTML, or plain text) with the '--output-format' option.
+- Choose your preferred output style (Markdown, HTML, or text) with the '--output-style' option.
 - Configure default settings with the 'configure' subcommand.
 
 For detailed usage instructions, use 'wslshot --help' or 'wslshot [command] --help'.
@@ -113,7 +113,7 @@ def wslshot():
 
     - Customize the number of screenshots with --count.
     - Specify source and destination directories with --source and --destination.
-    - Customize output format (Markdown, HTML, or plain text) with --output-format.
+    - Customize output style (Markdown, HTML, or text) with --output-style.
     """
 
 
@@ -133,17 +133,8 @@ def wslshot():
 )
 @click.option(
     "--output-style",
-    "output_format_new",
+    "output_format",
     help=("Specify the output style (markdown, html, text). Overrides the default set in config."),
-)
-@click.option(
-    "--output-format",
-    "-f",
-    "output_format_deprecated",
-    help=(
-        "[DEPRECATED - use --output-style] "
-        "Specify the output format (markdown, html, text). Overrides the default set in config."
-    ),
 )
 @click.option(
     "--convert-to",
@@ -152,7 +143,7 @@ def wslshot():
     help="Convert screenshot(s) to the specified format (png, jpg, webp, gif).",
 )
 @click.argument("image_path", type=click.Path(exists=True), required=False)
-def fetch(source, destination, count, output_format_new, output_format_deprecated, convert_to, image_path):
+def fetch(source, destination, count, output_format, convert_to, image_path):
     """
     Fetches and copies the latest screenshot(s) from the source to the specified destination.
 
@@ -190,19 +181,6 @@ def fetch(source, destination, count, output_format_new, output_format_deprecate
             err=True,
         )
         sys.exit(1)
-
-    # Handle deprecated --output-format option
-    output_format = output_format_new or output_format_deprecated
-
-    if output_format_deprecated is not None:
-        click.echo(
-            click.style(
-                "Warning: The --output-format/-f option is deprecated and will be removed in v1.0.0. "
-                "Use --output-style instead.",
-                fg="yellow",
-            ),
-            err=True,
-        )
 
     # Output format
     if output_format is None:
@@ -913,14 +891,8 @@ def set_default_convert_to(convert_format: str | None) -> None:
 )
 @click.option(
     "--output-style",
-    "output_format_new",
+    "output_format",
     help="Set the default output style (markdown, html, text).",
-)
-@click.option(
-    "--output-format",
-    "-f",
-    "output_format_deprecated",
-    help="[DEPRECATED - use --output-style] Set the default output format (markdown, html, text).",
 )
 @click.option(
     "--convert-to",
@@ -928,7 +900,7 @@ def set_default_convert_to(convert_format: str | None) -> None:
     type=click.Choice(["png", "jpg", "jpeg", "webp", "gif"], case_sensitive=False),
     help="Set the default image conversion format.",
 )
-def configure(source, destination, auto_stage_enabled, output_format_new, output_format_deprecated, convert_to):
+def configure(source, destination, auto_stage_enabled, output_format, convert_to):
     """
     Set the default source directory, control automatic staging, and set the default output style.
 
@@ -948,19 +920,6 @@ def configure(source, destination, auto_stage_enabled, output_format_new, output
 
     - For VM users, you should configure a shared folder between Windows and the VM before proceeding.
     """
-    # Handle deprecated --output-format option
-    output_format = output_format_new or output_format_deprecated
-
-    if output_format_deprecated is not None:
-        click.echo(
-            click.style(
-                "Warning: The --output-format/-f option is deprecated and will be removed in v1.0.0. "
-                "Use --output-style instead.",
-                fg="yellow",
-            ),
-            err=True,
-        )
-
     # When no options are specified, ask the user for their preferences.
     if all(x is None for x in (source, destination, auto_stage_enabled, output_format, convert_to)):
         write_config(get_config_file_path())
