@@ -34,7 +34,7 @@ Simply take a screenshot using the Windows Snipping tool (`win + shift + S`), an
   * Or automatically detect `/assets/images/` or other typical folders for this use case.
 * Fetch the most recent screenshot or specify a number of recent screenshots to fetch.
 * Control automatic staging of screenshots when copied to a git repository.
-* Set a default output format (Markdown, HTML, plain text of the path) and specify a custom format per operation.
+* Set a default output style (Markdown, HTML, text) and specify a custom style per operation.
 
 ## Installation
 
@@ -107,7 +107,7 @@ This command allows you to set various options:
 
 * **`--auto-stage-enabled`**: This option lets you control whether screenshots are automatically staged when copied to a git repository. By default, this option is set to `False`. If this option is set to `True`, any screenshot copied to a git repository will automatically be staged for commit.
 
-* **`--output-style`**: This option lets you set the default output style for the links to the screenshots that `wslshot` creates. The available formats are Markdown, HTML, and text (plain path). If you do not set this option, `wslshot` will output links in Markdown format by default. Note: The legacy option name `--output-format` is deprecated but still accepted for backward compatibility. The legacy format name `plain_text` is also deprecated; use `text` instead.
+* **`--output-style`**: This option lets you set the default output style for the links to the screenshots that `wslshot` creates. The available styles are Markdown, HTML, and text. If you do not set this option, `wslshot` will output links in Markdown format by default.
 
 Remember, these are just the default settings. You can override these settings on a per-operation basis by providing the corresponding options when running the `wslshot` command.
 

@@ -138,8 +138,8 @@ def test_print_formatted_path_html_multiple_screenshots(monkeypatch: pytest.Monk
     assert all(line["err"] is False for line in output_lines)
 
 
-def test_print_formatted_path_plain_text_relative_to_repo(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test plain text format with relative path adds leading slash."""
+def test_print_formatted_path_text_relative_to_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test text format with relative path adds leading slash."""
     output_lines: list[dict[str, str | bool]] = []
 
     def mock_echo(msg: str, err: bool = False) -> None:
@@ -148,15 +148,15 @@ def test_print_formatted_path_plain_text_relative_to_repo(monkeypatch: pytest.Mo
     monkeypatch.setattr("click.echo", mock_echo)
 
     screenshots = (Path("assets/images/screenshot_abc123.png"),)
-    cli.print_formatted_path("plain_text", screenshots, relative_to_repo=True)
+    cli.print_formatted_path("text", screenshots, relative_to_repo=True)
 
     assert len(output_lines) == 1
     assert output_lines[0]["msg"] == "/assets/images/screenshot_abc123.png"
     assert output_lines[0]["err"] is False
 
 
-def test_print_formatted_path_plain_text_absolute_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test plain text format with absolute path has no leading slash."""
+def test_print_formatted_path_text_absolute_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test text format with absolute path has no leading slash."""
     output_lines: list[dict[str, str | bool]] = []
 
     def mock_echo(msg: str, err: bool = False) -> None:
@@ -165,17 +165,17 @@ def test_print_formatted_path_plain_text_absolute_path(monkeypatch: pytest.Monke
     monkeypatch.setattr("click.echo", mock_echo)
 
     screenshots = (Path("/home/user/screenshots/screenshot_abc123.png"),)
-    cli.print_formatted_path("plain_text", screenshots, relative_to_repo=False)
+    cli.print_formatted_path("text", screenshots, relative_to_repo=False)
 
     assert len(output_lines) == 1
     assert output_lines[0]["msg"] == "/home/user/screenshots/screenshot_abc123.png"
     assert output_lines[0]["err"] is False
 
 
-def test_print_formatted_path_plain_text_multiple_screenshots(
+def test_print_formatted_path_text_multiple_screenshots(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test plain text format with multiple screenshots outputs each on separate line."""
+    """Test text format with multiple screenshots outputs each on separate line."""
     output_lines: list[dict[str, str | bool]] = []
 
     def mock_echo(msg: str, err: bool = False) -> None:
@@ -187,7 +187,7 @@ def test_print_formatted_path_plain_text_multiple_screenshots(
         Path("assets/images/screenshot_abc123.png"),
         Path("assets/images/animated_def456.gif"),
     )
-    cli.print_formatted_path("plain_text", screenshots, relative_to_repo=True)
+    cli.print_formatted_path("text", screenshots, relative_to_repo=True)
 
     assert len(output_lines) == 2
     assert output_lines[0]["msg"] == "/assets/images/screenshot_abc123.png"

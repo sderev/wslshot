@@ -797,6 +797,78 @@ def test_fetch_error_lists_valid_options(
     assert "text" in result.output
 
 
+def test_fetch_rejects_plain_text_cli_input(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test `--output-style plain_text` is rejected with error."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-style",
+            "plain_text",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    # Should fail with exit code 1
+    assert result.exit_code == 1
+    # Should show error message
+    assert "Invalid output format" in result.output
+    # Should list valid options
+    assert "markdown" in result.output
+    assert "html" in result.output
+    assert "text" in result.output
+
+
+def test_fetch_rejects_plain_text_in_config(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test config with `plain_text` format is rejected with error."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    # Create config with legacy plain_text format
+    config_data = {
+        "default_source": str(source_dir),
+        "default_destination": str(dest_dir),
+        "default_output_format": "plain_text",
+        "default_count": 1,
+        "auto_stage_enabled": False,
+        "default_convert_to": None,
+    }
+    with open(config_file, "w") as f:
+        json.dump(config_data, f)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch"],
+        env={"HOME": str(fake_home)},
+    )
+
+    # Should fail with exit code 1
+    assert result.exit_code == 1
+    # Should show error message
+    assert "Invalid output format" in result.output
+    # Should list valid options
+    assert "markdown" in result.output
+    assert "html" in result.output
+    assert "text" in result.output
+
+
 # ============================================================================
 # 5. Git Integration
 # ============================================================================

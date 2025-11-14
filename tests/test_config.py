@@ -523,11 +523,11 @@ class TestSetDefaultOutputFormat:
         assert config["default_output_format"] == "html"
 
     def test_set_default_output_format_plain_text(self, fake_home: Path) -> None:
-        """Test setting default output format to plain_text (normalizes to text)."""
+        """Test setting default output format to text."""
         config_file = fake_home / ".config" / "wslshot" / "config.json"
         config_file.write_text('{"default_output_format": "markdown"}')
 
-        cli.set_default_output_format("plain_text")
+        cli.set_default_output_format("text")
 
         with open(config_file, "r", encoding="UTF-8") as f:
             config = json.load(f)
@@ -537,7 +537,7 @@ class TestSetDefaultOutputFormat:
     def test_set_default_output_format_case_insensitive(self, fake_home: Path) -> None:
         """Test that set_default_output_format accepts case variations."""
         config_file = fake_home / ".config" / "wslshot" / "config.json"
-        config_file.write_text('{"default_output_format": "plain_text"}')
+        config_file.write_text('{"default_output_format": "html"}')
 
         cli.set_default_output_format("MARKDOWN")
 

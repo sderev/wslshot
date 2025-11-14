@@ -24,7 +24,6 @@ import subprocess
 import sys
 import tempfile
 import uuid
-import warnings
 from pathlib import Path
 from typing import Any
 
@@ -186,26 +185,7 @@ def fetch(source, destination, count, output_format, convert_to, image_path):
     if output_format is None:
         output_format = config["default_output_format"]
 
-    # Emit deprecation warning for plain_text
-    if output_format.casefold() == "plain_text":
-        # Emit both DeprecationWarning (for programmatic detection) and visible warning
-        warnings.warn(
-            "The 'plain_text' output format is deprecated and will be removed in v1.0.0. "
-            "Use 'text' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        click.echo(
-            click.style(
-                "Warning: The 'plain_text' output format is deprecated and will be removed in v1.0.0. "
-                "Use 'text' instead.",
-                fg="yellow",
-            ),
-            err=True,
-        )
-        output_format = "text"  # Normalize to new name
-
-    if output_format.casefold() not in ("markdown", "html", "text", "plain_text"):
+    if output_format.casefold() not in ("markdown", "html", "text"):
         click.echo(f"Invalid output format: {output_format}", err=True)
         click.echo("Valid options are: markdown, html, text", err=True)
         suggestion = suggest_format(output_format, ["markdown", "html", "text"])
@@ -496,7 +476,7 @@ def print_formatted_path(
         elif output_format.casefold() == "html":
             click.echo(f'<img src="{screenshot_path}" alt="{screenshot.name}">')
 
-        elif output_format.casefold() in ("plain_text", "text"):
+        elif output_format.casefold() == "text":
             click.echo(screenshot_path)
 
         else:
@@ -604,11 +584,8 @@ def write_config(config_file_path: Path) -> None:
                 message,
                 current_config,
                 default,
-                options=["markdown", "html", "text", "plain_text"],
+                options=["markdown", "html", "text"],
             )
-            # Normalize plain_text to text before writing (case-insensitive)
-            if config[field].casefold() == "plain_text":
-                config[field] = "text"
         elif field == "default_convert_to":
             value = get_config_input(field, message, current_config, default or "")
             # Normalize: empty string or whitespace-only to None
@@ -834,7 +811,7 @@ def set_default_output_format(output_format: str) -> None:
     Args:
         output_format: The default output format.
     """
-    if output_format.casefold() not in ["markdown", "html", "text", "plain_text"]:
+    if output_format.casefold() not in ["markdown", "html", "text"]:
         click.echo(click.style(f"Invalid output format: {output_format}", fg="red"), err=True)
         click.echo("Valid options are: markdown, html, text", err=True)
         suggestion = suggest_format(output_format, ["markdown", "html", "text"])
@@ -844,9 +821,7 @@ def set_default_output_format(output_format: str) -> None:
 
     config_file_path = get_config_file_path()
     config = read_config(config_file_path)
-    # Normalize plain_text to text when storing
-    normalized_format = output_format.casefold().replace("plain_text", "text")
-    config["default_output_format"] = normalized_format
+    config["default_output_format"] = output_format.casefold()
 
     atomic_write_json(config_file_path, config)
 
