@@ -196,11 +196,20 @@ def fetch(source, destination, count, output_format_new, output_format_deprecate
 
     # Emit deprecation warning for plain_text
     if output_format.casefold() == "plain_text":
+        # Emit both DeprecationWarning (for programmatic detection) and visible warning
         warnings.warn(
             "The 'plain_text' output format is deprecated and will be removed in v1.0.0. "
             "Use 'text' instead.",
             DeprecationWarning,
             stacklevel=2,
+        )
+        click.echo(
+            click.style(
+                "Warning: The 'plain_text' output format is deprecated and will be removed in v1.0.0. "
+                "Use 'text' instead.",
+                fg="yellow",
+            ),
+            err=True,
         )
         output_format = "text"  # Normalize to new name
 
@@ -605,6 +614,9 @@ def write_config(config_file_path: Path) -> None:
                 default,
                 options=["markdown", "html", "text", "plain_text"],
             )
+            # Normalize plain_text to text before writing (case-insensitive)
+            if config[field].casefold() == "plain_text":
+                config[field] = "text"
         elif field == "default_convert_to":
             value = get_config_input(field, message, current_config, default or "")
             # Normalize: empty string or whitespace-only to None
