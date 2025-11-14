@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 import sys
 from pathlib import Path
 from typing import Any
@@ -943,3 +945,23 @@ class TestAtomicWriteJson:
         # Verify it can be parsed back
         parsed = json.loads(content)
         assert parsed == test_data
+
+    def test_atomic_write_json_calls_fsync(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that atomic_write_json fsyncs file and directory for durability."""
+        fsync_targets = []
+        original_fsync = os.fsync
+
+        def mock_fsync(fd: int) -> None:
+            fsync_targets.append(os.fstat(fd).st_mode)
+            return original_fsync(fd)
+
+        monkeypatch.setattr(os, "fsync", mock_fsync)
+
+        config_file = tmp_path / "config.json"
+        cli.atomic_write_json(config_file, {"key": "value"})
+
+        assert len(fsync_targets) == 2, "fsync must be called for file and directory"
+        assert any(stat.S_ISREG(mode) for mode in fsync_targets)
+        assert any(stat.S_ISDIR(mode) for mode in fsync_targets)

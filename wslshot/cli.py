@@ -56,12 +56,24 @@ def atomic_write_json(path: Path, data: dict, mode: int = 0o600) -> None:
         # Write to temp file
         with os.fdopen(temp_fd, "w", encoding="UTF-8") as f:
             json.dump(data, f, indent=4)
+            f.flush()              # Flush Python buffers to OS
+            os.fsync(f.fileno())   # Force OS to write to physical disk
 
         # Set permissions on temp file
         os.chmod(temp_path, mode)
 
         # Atomic rename (POSIX guarantees atomicity)
         os.replace(temp_path, str(path))
+
+        # Ensure directory entry is durable
+        dir_flags = os.O_RDONLY
+        if hasattr(os, "O_DIRECTORY"):
+            dir_flags |= os.O_DIRECTORY
+        dir_fd = os.open(path.parent, dir_flags)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
 
     except Exception:
         # Cleanup temp file on any error
