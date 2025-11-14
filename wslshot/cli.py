@@ -900,9 +900,15 @@ def set_default_convert_to(convert_format: str | None) -> None:
     help=("Control whether screenshots are automatically staged when copied to a git repository."),
 )
 @click.option(
+    "--output-style",
+    "output_format_new",
+    help="Set the default output style (markdown, html, text).",
+)
+@click.option(
     "--output-format",
     "-f",
-    help="Set the default output format (markdown, HTML, text).",
+    "output_format_deprecated",
+    help="[DEPRECATED - use --output-style] Set the default output format (markdown, html, text).",
 )
 @click.option(
     "--convert-to",
@@ -910,9 +916,9 @@ def set_default_convert_to(convert_format: str | None) -> None:
     type=click.Choice(["png", "jpg", "jpeg", "webp", "gif"], case_sensitive=False),
     help="Set the default image conversion format.",
 )
-def configure(source, destination, auto_stage_enabled, output_format, convert_to):
+def configure(source, destination, auto_stage_enabled, output_format_new, output_format_deprecated, convert_to):
     """
-    Set the default source directory, control automatic staging, and set the default output format.
+    Set the default source directory, control automatic staging, and set the default output style.
 
     Usage:
 
@@ -920,7 +926,7 @@ def configure(source, destination, auto_stage_enabled, output_format, convert_to
 
     - Control whether screenshots are automatically staged with --auto-stage.
 
-    - Set the default output format (markdown, HTML, text) with --output-format.
+    - Set the default output style (markdown, html, text) with --output-style.
 
     ___
 
@@ -930,6 +936,19 @@ def configure(source, destination, auto_stage_enabled, output_format, convert_to
 
     - For VM users, you should configure a shared folder between Windows and the VM before proceeding.
     """
+    # Handle deprecated --output-format option
+    output_format = output_format_new or output_format_deprecated
+
+    if output_format_deprecated is not None:
+        click.echo(
+            click.style(
+                "Warning: The --output-format/-f option is deprecated and will be removed in v1.0.0. "
+                "Use --output-style instead.",
+                fg="yellow",
+            ),
+            err=True,
+        )
+
     # When no options are specified, ask the user for their preferences.
     if all(x is None for x in (source, destination, auto_stage_enabled, output_format, convert_to)):
         write_config(get_config_file_path())

@@ -98,7 +98,7 @@ Remember to consult the documentation of your hypervisor for specific instructio
 Before using `wslshot`, you may want to configure it to suit your needs. You can do this using the `configure` command:
 
 ```bash
-wslshot configure --source /path/to/source --auto-stage-enabled True --output-format HTML
+wslshot configure --source /path/to/source --auto-stage-enabled True --output-style HTML
 ```
 
 This command allows you to set various options:
@@ -107,7 +107,7 @@ This command allows you to set various options:
 
 * **`--auto-stage-enabled`**: This option lets you control whether screenshots are automatically staged when copied to a git repository. By default, this option is set to `False`. If this option is set to `True`, any screenshot copied to a git repository will automatically be staged for commit.
 
-* **`--output-format` or `-f`**: This option lets you set the default output format for the links to the screenshots that `wslshot` creates. The available formats are Markdown, HTML, and text (plain path). If you do not set this option, `wslshot` will output links in Markdown format by default. Note: The legacy format name `plain_text` is deprecated but still accepted for backward compatibility.
+* **`--output-style`**: This option lets you set the default output style for the links to the screenshots that `wslshot` creates. The available formats are Markdown, HTML, and text (plain path). If you do not set this option, `wslshot` will output links in Markdown format by default. Note: The legacy option name `--output-format` is deprecated but still accepted for backward compatibility. The legacy format name `plain_text` is also deprecated; use `text` instead.
 
 Remember, these are just the default settings. You can override these settings on a per-operation basis by providing the corresponding options when running the `wslshot` command.
 
@@ -139,7 +139,7 @@ This will fetch the three most recent screenshots.
 **These are all the possible options**:
 
 ```bash
-wslshot [--source /custom/source] [--destination /custom/destination] [--count 3] [--output-format HTML]
+wslshot [--source /custom/source] [--destination /custom/destination] [--count 3] [--output-style HTML]
 ```
 
 ## Specifying an Image Path Instead of a Directory

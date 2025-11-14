@@ -490,3 +490,148 @@ def test_configure_convert_to_invalid_format(fake_home: Path) -> None:
     # Click validates the choice before our code runs
     assert result.exit_code != 0
     assert "Invalid value for '--convert-to'" in result.output
+
+
+def test_configure_with_output_style_markdown(fake_home: Path) -> None:
+    """Test configure --output-style markdown (new option name)."""
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    create_default_config(config_file)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.wslshot,
+        ["configure", "--output-style", "markdown"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+
+    # Verify config was updated
+    updated_config = json.loads(config_file.read_text())
+    assert updated_config["default_output_format"] == "markdown"
+
+
+def test_configure_with_output_style_html(fake_home: Path) -> None:
+    """Test configure --output-style html (new option name)."""
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    create_default_config(config_file)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.wslshot,
+        ["configure", "--output-style", "html"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+
+    # Verify config was updated
+    updated_config = json.loads(config_file.read_text())
+    assert updated_config["default_output_format"] == "html"
+
+
+def test_configure_with_output_style_text(fake_home: Path) -> None:
+    """Test configure --output-style text (new option name)."""
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    create_default_config(config_file)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.wslshot,
+        ["configure", "--output-style", "text"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+
+    # Verify config was updated
+    updated_config = json.loads(config_file.read_text())
+    assert updated_config["default_output_format"] == "text"
+
+
+def test_configure_output_style_precedence_over_output_format(fake_home: Path) -> None:
+    """Test that --output-style takes precedence over --output-format when both provided."""
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    create_default_config(config_file)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "configure",
+            "--output-style",
+            "html",  # Should use this
+            "--output-format",
+            "markdown",  # Should ignore this
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+
+    # Verify config was updated with the --output-style value
+    updated_config = json.loads(config_file.read_text())
+    assert updated_config["default_output_format"] == "html"
+
+
+def test_configure_output_format_shows_visible_warning(fake_home: Path) -> None:
+    """Test that using --output-format shows a visible deprecation warning in stderr."""
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    create_default_config(config_file)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.wslshot,
+        ["configure", "--output-format", "markdown"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+
+    warning_output = result.stderr or result.output
+
+    # Warning should appear (stderr if supported, fallback to stdout capture)
+    assert "Warning:" in warning_output
+    assert "--output-format" in warning_output
+    assert "deprecated" in warning_output
+    assert "--output-style" in warning_output
+
+
+def test_configure_output_style_no_deprecation_warning(fake_home: Path) -> None:
+    """Test that using --output-style does NOT show a deprecation warning."""
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    create_default_config(config_file)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.wslshot,
+        ["configure", "--output-style", "markdown"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+
+    warning_output = result.stderr or result.output
+
+    # Should NOT show warning about --output-format (stderr-only check not reliable on Click<8)
+    assert "--output-format" not in warning_output
+    assert "deprecated" not in warning_output or "plain_text" in warning_output  # Allow plain_text warnings
+
+
+def test_configure_output_format_backward_compatible(fake_home: Path) -> None:
+    """Test that --output-format still works (backward compatibility)."""
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    create_default_config(config_file)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.wslshot,
+        ["configure", "--output-format", "html"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+
+    # Verify config was updated with the old option
+    updated_config = json.loads(config_file.read_text())
+    assert updated_config["default_output_format"] == "html"
