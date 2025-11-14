@@ -20,7 +20,9 @@ def test_print_formatted_path_markdown_relative_to_repo(monkeypatch: pytest.Monk
     cli.print_formatted_path("markdown", screenshots, relative_to_repo=True)
 
     assert len(output_lines) == 1
-    assert output_lines[0]["msg"] == "![screenshot_abc123.png](/assets/images/screenshot_abc123.png)"
+    assert (
+        output_lines[0]["msg"] == "![screenshot_abc123.png](/assets/images/screenshot_abc123.png)"
+    )
     assert output_lines[0]["err"] is False
 
 
@@ -37,11 +39,16 @@ def test_print_formatted_path_markdown_absolute_path(monkeypatch: pytest.MonkeyP
     cli.print_formatted_path("markdown", screenshots, relative_to_repo=False)
 
     assert len(output_lines) == 1
-    assert output_lines[0]["msg"] == "![screenshot_abc123.png](/home/user/screenshots/screenshot_abc123.png)"
+    assert (
+        output_lines[0]["msg"]
+        == "![screenshot_abc123.png](/home/user/screenshots/screenshot_abc123.png)"
+    )
     assert output_lines[0]["err"] is False
 
 
-def test_print_formatted_path_markdown_multiple_screenshots(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_print_formatted_path_markdown_multiple_screenshots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Test markdown format with multiple screenshots outputs each on separate line."""
     output_lines: list[dict[str, str | bool]] = []
 
@@ -57,7 +64,9 @@ def test_print_formatted_path_markdown_multiple_screenshots(monkeypatch: pytest.
     cli.print_formatted_path("markdown", screenshots, relative_to_repo=True)
 
     assert len(output_lines) == 2
-    assert output_lines[0]["msg"] == "![screenshot_abc123.png](/assets/images/screenshot_abc123.png)"
+    assert (
+        output_lines[0]["msg"] == "![screenshot_abc123.png](/assets/images/screenshot_abc123.png)"
+    )
     assert output_lines[1]["msg"] == "![animated_def456.gif](/assets/images/animated_def456.gif)"
     assert all(line["err"] is False for line in output_lines)
 
@@ -75,7 +84,10 @@ def test_print_formatted_path_html_relative_to_repo(monkeypatch: pytest.MonkeyPa
     cli.print_formatted_path("html", screenshots, relative_to_repo=True)
 
     assert len(output_lines) == 1
-    assert output_lines[0]["msg"] == '<img src="/assets/images/screenshot_abc123.png" alt="screenshot_abc123.png">'
+    assert (
+        output_lines[0]["msg"]
+        == '<img src="/assets/images/screenshot_abc123.png" alt="screenshot_abc123.png">'
+    )
     assert output_lines[0]["err"] is False
 
 
@@ -92,7 +104,10 @@ def test_print_formatted_path_html_absolute_path(monkeypatch: pytest.MonkeyPatch
     cli.print_formatted_path("html", screenshots, relative_to_repo=False)
 
     assert len(output_lines) == 1
-    assert output_lines[0]["msg"] == '<img src="/home/user/screenshots/screenshot_abc123.png" alt="screenshot_abc123.png">'
+    assert (
+        output_lines[0]["msg"]
+        == '<img src="/home/user/screenshots/screenshot_abc123.png" alt="screenshot_abc123.png">'
+    )
     assert output_lines[0]["err"] is False
 
 
@@ -112,8 +127,14 @@ def test_print_formatted_path_html_multiple_screenshots(monkeypatch: pytest.Monk
     cli.print_formatted_path("html", screenshots, relative_to_repo=True)
 
     assert len(output_lines) == 2
-    assert output_lines[0]["msg"] == '<img src="/assets/images/screenshot_abc123.png" alt="screenshot_abc123.png">'
-    assert output_lines[1]["msg"] == '<img src="/assets/images/animated_def456.gif" alt="animated_def456.gif">'
+    assert (
+        output_lines[0]["msg"]
+        == '<img src="/assets/images/screenshot_abc123.png" alt="screenshot_abc123.png">'
+    )
+    assert (
+        output_lines[1]["msg"]
+        == '<img src="/assets/images/animated_def456.gif" alt="animated_def456.gif">'
+    )
     assert all(line["err"] is False for line in output_lines)
 
 
@@ -151,7 +172,9 @@ def test_print_formatted_path_plain_text_absolute_path(monkeypatch: pytest.Monke
     assert output_lines[0]["err"] is False
 
 
-def test_print_formatted_path_plain_text_multiple_screenshots(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_print_formatted_path_plain_text_multiple_screenshots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Test plain text format with multiple screenshots outputs each on separate line."""
     output_lines: list[dict[str, str | bool]] = []
 
@@ -172,7 +195,9 @@ def test_print_formatted_path_plain_text_multiple_screenshots(monkeypatch: pytes
     assert all(line["err"] is False for line in output_lines)
 
 
-def test_print_formatted_path_invalid_format_exits_with_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_print_formatted_path_invalid_format_exits_with_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Test invalid format string exits with code 1 and writes to stderr."""
     output_lines: list[dict[str, str | bool]] = []
 
@@ -212,6 +237,9 @@ def test_print_formatted_path_preserves_filename_correctly(monkeypatch: pytest.M
     cli.print_formatted_path("markdown", screenshots, relative_to_repo=True)
 
     assert len(output_lines) == 2
-    assert output_lines[0]["msg"] == "![screenshot_with-dashes_123.png](/assets/images/screenshot_with-dashes_123.png)"
+    assert (
+        output_lines[0]["msg"]
+        == "![screenshot_with-dashes_123.png](/assets/images/screenshot_with-dashes_123.png)"
+    )
     assert output_lines[1]["msg"] == "![file.with.dots.jpeg](/assets/images/file.with.dots.jpeg)"
     assert all(line["err"] is False for line in output_lines)
