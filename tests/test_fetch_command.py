@@ -272,6 +272,226 @@ def test_fetch_with_output_format_plain_text(
     assert "<img" not in result.output
 
 
+def test_fetch_with_output_style_markdown(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with --output-style markdown (new option name)."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-style",
+            "markdown",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert "![screenshot_" in result.output
+    assert "](" in result.output
+
+
+def test_fetch_with_output_style_html(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with --output-style html (new option name)."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-style",
+            "html",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert '<img src="' in result.output
+    assert 'alt="screenshot_' in result.output
+
+
+def test_fetch_with_output_style_text(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with --output-style text (new option name)."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-style",
+            "text",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Text should just show the path
+    assert str(dest_dir) in result.output
+    # Should not contain markdown or html formatting
+    assert "![" not in result.output
+    assert "<img" not in result.output
+
+
+def test_fetch_output_style_precedence_over_output_format(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test that --output-style takes precedence over --output-format when both provided."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-style",
+            "html",  # Should use this
+            "--output-format",
+            "markdown",  # Should ignore this
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Should use HTML format (from --output-style)
+    assert '<img src="' in result.output
+    assert 'alt="screenshot_' in result.output
+    # Should not use markdown format (check output without the warning)
+    assert '<img src="' in result.output.split('\n')[-2]  # Last substantial line before empty line
+
+
+def test_fetch_output_format_shows_visible_warning(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test that using --output-format shows a visible deprecation warning in stderr."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-format",
+            "markdown",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    warning_output = result.stderr or result.output
+
+    # Warning should appear (stderr if supported, fallback to stdout capture)
+    assert "Warning:" in warning_output
+    assert "--output-format" in warning_output
+    assert "deprecated" in warning_output
+    assert "--output-style" in warning_output
+
+
+def test_fetch_output_style_no_deprecation_warning(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test that using --output-style does NOT show a deprecation warning."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-style",
+            "markdown",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    warning_output = result.stderr or result.output
+
+    # Should NOT show warning about --output-format
+    assert "--output-format" not in warning_output
+    assert "deprecated" not in warning_output or "plain_text" in warning_output  # Allow plain_text warnings
+
+
+def test_fetch_output_format_backward_compatible(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test that --output-format still works (backward compatibility)."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-format",
+            "html",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Should produce HTML output
+    assert '<img src="' in result.output
+    assert 'alt="screenshot_' in result.output
+
+
 def test_fetch_with_all_options_combined(
     runner: CliRunner,
     fake_home: Path,
@@ -1071,7 +1291,7 @@ def test_fetch_markdown_format_in_output(
             str(source_dir),
             "--destination",
             str(dest_dir),
-            "--output-format",
+            "--output-style",
             "markdown",
         ],
         env={"HOME": str(fake_home)},
@@ -1100,7 +1320,7 @@ def test_fetch_html_format_in_output(
             str(source_dir),
             "--destination",
             str(dest_dir),
-            "--output-format",
+            "--output-style",
             "html",
         ],
         env={"HOME": str(fake_home)},
@@ -1118,7 +1338,7 @@ def test_fetch_plain_text_format_in_output(
     dest_dir: Path,
     config_file: Path,
 ) -> None:
-    """Test plain_text format in output."""
+    """Test text format in output."""
     create_screenshot(source_dir, "screenshot.png")
 
     result = runner.invoke(
@@ -1129,8 +1349,8 @@ def test_fetch_plain_text_format_in_output(
             str(source_dir),
             "--destination",
             str(dest_dir),
-            "--output-format",
-            "plain_text",
+            "--output-style",
+            "text",
         ],
         env={"HOME": str(fake_home)},
     )

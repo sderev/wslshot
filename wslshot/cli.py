@@ -183,11 +183,13 @@ def fetch(source, destination, count, output_format_new, output_format_deprecate
     output_format = output_format_new or output_format_deprecated
 
     if output_format_deprecated is not None:
-        warnings.warn(
-            "The --output-format/-f option is deprecated and will be removed in v1.0.0. "
-            "Use --output-style instead.",
-            DeprecationWarning,
-            stacklevel=2,
+        click.echo(
+            click.style(
+                "Warning: The --output-format/-f option is deprecated and will be removed in v1.0.0. "
+                "Use --output-style instead.",
+                fg="yellow",
+            ),
+            err=True,
         )
 
     # Output format
