@@ -429,7 +429,7 @@ def test_stage_screenshots_runs_from_git_root(
 def test_stage_screenshots_handles_called_process_error(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
 ) -> None:
-    """Test stage_screenshots() handles CalledProcessError gracefully (prints error but doesn't crash)."""
+    """Test stage_screenshots() handles CalledProcessError gracefully (prints warning but doesn't crash)."""
     git_root = tmp_path / "repo"
     git_root.mkdir()
 
@@ -441,12 +441,12 @@ def test_stage_screenshots_handles_called_process_error(
 
     screenshots = (Path("assets/images/shot.png"),)
 
-    # Should not raise an exception
+    # Should not raise an exception (falls back to individual staging)
     cli.stage_screenshots(screenshots, git_root)
 
-    # Should print error message to stderr
+    # Should print warning for failed individual file
     captured = capsys.readouterr()
-    assert "Failed to stage screenshots" in captured.err
+    assert "Warning: Failed to stage screenshot" in captured.err
 
 
 def test_stage_screenshots_stages_multiple_files(
@@ -482,3 +482,154 @@ def test_stage_screenshots_stages_multiple_files(
         "img/shot2.png",
         "assets/images/shot3.png",
     ]
+
+
+# ============================================================================
+# Git Staging Fallback Tests (Issue #4 - PERSO-258)
+# ============================================================================
+
+
+def test_stage_screenshots_falls_back_to_individual_on_batch_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Test stage_screenshots() falls back to individual staging when batch fails."""
+    git_root = tmp_path / "repo"
+    git_root.mkdir()
+
+    called_commands = []
+    batch_failed = False
+
+    def fake_run(cmd, check, cwd):
+        """Mock subprocess.run to simulate batch failure, individual success."""
+        nonlocal batch_failed
+        called_commands.append(cmd)
+
+        # First call is batch - simulate failure
+        if not batch_failed:
+            batch_failed = True
+            raise CalledProcessError(128, cmd)
+
+        # Individual calls succeed
+        return CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    screenshots = (
+        Path("shot1.png"),
+        Path("shot2.png"),
+        Path("shot3.png"),
+    )
+
+    cli.stage_screenshots(screenshots, git_root)
+
+    # Should try batch first, then fall back to 3 individual commands
+    assert len(called_commands) == 4
+
+    # First command: batch (fails)
+    assert called_commands[0] == ["git", "add", "shot1.png", "shot2.png", "shot3.png"]
+
+    # Fallback commands: individual (succeed)
+    assert called_commands[1] == ["git", "add", "shot1.png"]
+    assert called_commands[2] == ["git", "add", "shot2.png"]
+    assert called_commands[3] == ["git", "add", "shot3.png"]
+
+
+def test_stage_screenshots_partial_success_with_invalid_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    """Test stage_screenshots() stages valid files even when some fail."""
+    git_root = tmp_path / "repo"
+    git_root.mkdir()
+
+    called_commands = []
+    batch_attempted = False
+
+    def fake_run(cmd, check, cwd):
+        """Mock subprocess.run to simulate one invalid file."""
+        nonlocal batch_attempted
+        called_commands.append(cmd)
+
+        # Batch command fails (one file is invalid)
+        if not batch_attempted:
+            batch_attempted = True
+            raise CalledProcessError(128, cmd)
+
+        # Individual staging: file2.png fails, others succeed
+        if "file2.png" in str(cmd):
+            raise CalledProcessError(128, cmd)
+
+        return CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    screenshots = (
+        Path("file1.png"),
+        Path("file2.png"),  # This one will fail
+        Path("file3.png"),
+    )
+
+    cli.stage_screenshots(screenshots, git_root)
+
+    # Verify warning message for failed file
+    captured = capsys.readouterr()
+    assert "Warning: Failed to stage screenshot" in captured.err
+    assert "file2.png" in captured.err
+
+    # All files should be attempted individually after batch fails
+    assert len(called_commands) == 4  # 1 batch + 3 individual
+
+
+def test_stage_screenshots_reports_individual_failures(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    """Test stage_screenshots() reports warnings for individual file failures."""
+    git_root = tmp_path / "repo"
+    git_root.mkdir()
+
+    def fake_run(cmd, check, cwd):
+        """Mock subprocess.run - batch fails, all individual fail."""
+        # All git add commands fail
+        raise CalledProcessError(128, cmd)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    screenshots = (
+        Path("bad1.png"),
+        Path("bad2.png"),
+    )
+
+    cli.stage_screenshots(screenshots, git_root)
+
+    # Verify warning messages for all failed files
+    captured = capsys.readouterr()
+    assert "Warning: Failed to stage screenshot" in captured.err
+    assert "bad1.png" in captured.err
+    assert "bad2.png" in captured.err
+
+
+def test_stage_screenshots_batch_success_no_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Test stage_screenshots() doesn't fall back when batch succeeds."""
+    git_root = tmp_path / "repo"
+    git_root.mkdir()
+
+    called_commands = []
+
+    def fake_run(cmd, check, cwd):
+        """Mock subprocess.run - batch succeeds."""
+        called_commands.append(cmd)
+        return CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    screenshots = (
+        Path("shot1.png"),
+        Path("shot2.png"),
+    )
+
+    cli.stage_screenshots(screenshots, git_root)
+
+    # Should only call batch command once (no fallback needed)
+    assert len(called_commands) == 1
+    assert called_commands[0] == ["git", "add", "shot1.png", "shot2.png"]

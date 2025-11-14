@@ -429,14 +429,27 @@ def stage_screenshots(screenshots: tuple[Path, ...], git_root: Path) -> None:
         return
 
     try:
-        # Batch all files into a single git add command
+        # Try batch staging first for performance
         subprocess.run(
             ["git", "add"] + [str(screenshot) for screenshot in screenshots],
             check=True,
             cwd=git_root,
         )
-    except subprocess.CalledProcessError as e:
-        click.echo(f"Failed to stage screenshots: {e}", err=True)
+    except subprocess.CalledProcessError:
+        # Batch staging failed - fall back to individual staging
+        # This ensures valid files are staged even if some fail
+        for screenshot in screenshots:
+            try:
+                subprocess.run(
+                    ["git", "add", str(screenshot)],
+                    check=True,
+                    cwd=git_root,
+                )
+            except subprocess.CalledProcessError as e:
+                click.echo(
+                    f"Warning: Failed to stage screenshot '{screenshot}': {e}",
+                    err=True,
+                )
 
 
 def format_screenshots_path_for_git(

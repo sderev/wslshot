@@ -531,3 +531,96 @@ def test_generate_screenshot_name_lowercases_extension(monkeypatch: pytest.Monke
     for input_path, expected_name in test_cases:
         result = cli.generate_screenshot_name(input_path)
         assert result == expected_name
+
+
+# ==================== Heapq Optimization Tests ====================
+
+
+def test_get_screenshots_uses_heapq_nlargest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that get_screenshots uses heapq.nlargest instead of list.sort for efficiency."""
+    import heapq
+
+    source = tmp_path / "source"
+    source.mkdir()
+
+    # Create 10 files
+    for i in range(10):
+        (source / f"screenshot_{i}.png").touch()
+
+    # Track heapq.nlargest calls
+    original_nlargest = heapq.nlargest
+    nlargest_calls = []
+
+    def tracked_nlargest(*args, **kwargs):
+        nlargest_calls.append((args, kwargs))
+        return original_nlargest(*args, **kwargs)
+
+    monkeypatch.setattr(heapq, "nlargest", tracked_nlargest)
+
+    # Get 5 screenshots
+    cli.get_screenshots(source, count=5)
+
+    # Verify heapq.nlargest was called
+    assert len(nlargest_calls) == 1
+    assert nlargest_calls[0][0][0] == 5  # First arg should be count=5
+
+
+def test_get_screenshots_caches_stat_calls(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that get_screenshots only calls stat() once per file (caching)."""
+    source = tmp_path / "source"
+    source.mkdir()
+
+    # Create 10 files
+    files = []
+    for i in range(10):
+        file = source / f"screenshot_{i}.png"
+        file.touch()
+        files.append(file)
+
+    # Track stat calls
+    original_stat = Path.stat
+    stat_calls = []
+
+    def tracked_stat(self, **kwargs):
+        stat_calls.append(str(self))
+        # Handle both Python < 3.13 (no follow_symlinks) and >= 3.13 (with follow_symlinks)
+        try:
+            return original_stat(self, **kwargs)
+        except TypeError:
+            # Older Python versions don't accept follow_symlinks
+            return original_stat(self)
+
+    monkeypatch.setattr(Path, "stat", tracked_stat)
+
+    # Get 5 screenshots
+    cli.get_screenshots(source, count=5)
+
+    # Each file should be stat'd exactly once (not multiple times)
+    # We expect 10 stat calls (one per file in directory)
+    assert len(stat_calls) == 10
+    # Verify no duplicate stat calls
+    assert len(set(stat_calls)) == 10
+
+
+def test_get_screenshots_count_exceeds_available(tmp_path: Path) -> None:
+    """Test that get_screenshots handles count > available files gracefully."""
+    source = tmp_path / "source"
+    source.mkdir()
+
+    # Create only 3 files
+    for i in range(3):
+        (source / f"screenshot_{i}.png").touch()
+
+    # Request 5 files (more than available) - should exit with error
+    with pytest.raises(SystemExit):
+        cli.get_screenshots(source, count=5)
+
+
+def test_get_screenshots_empty_directory(tmp_path: Path) -> None:
+    """Test that get_screenshots handles empty directory (no screenshots)."""
+    source = tmp_path / "source"
+    source.mkdir()
+
+    # No screenshots in directory - should exit with error
+    with pytest.raises(SystemExit):
+        cli.get_screenshots(source, count=1)
