@@ -18,6 +18,7 @@ def create_default_config(config_file: Path) -> None:
                 "default_destination": "",
                 "auto_stage_enabled": False,
                 "default_output_format": "markdown",
+                "default_convert_to": None,
             }
         )
     )
@@ -453,3 +454,39 @@ def test_configure_destination_resolves_to_absolute_path(fake_home: Path, tmp_pa
     updated_config = json.loads(config_file.read_text())
     assert Path(updated_config["default_destination"]).is_absolute()
     assert updated_config["default_destination"] == str(dest_dir)
+
+
+def test_configure_convert_to_sets_default(fake_home: Path) -> None:
+    """Test configure --convert-to sets the default conversion format."""
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    create_default_config(config_file)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.wslshot,
+        ["configure", "--convert-to", "jpg"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+
+    # Verify config was updated with convert format
+    updated_config = json.loads(config_file.read_text())
+    assert updated_config["default_convert_to"] == "jpg"
+
+
+def test_configure_convert_to_invalid_format(fake_home: Path) -> None:
+    """Test configure --convert-to with invalid format shows error."""
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    create_default_config(config_file)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.wslshot,
+        ["configure", "--convert-to", "bmp"],
+        env={"HOME": str(fake_home)},
+    )
+
+    # Click validates the choice before our code runs
+    assert result.exit_code != 0
+    assert "Invalid value for '--convert-to'" in result.output

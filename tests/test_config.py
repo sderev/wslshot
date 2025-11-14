@@ -164,6 +164,7 @@ class TestWriteConfig:
             "default_destination": str(dest_dir),
             "auto_stage_enabled": True,
             "default_output_format": "html",
+            "default_convert_to": None,
         }
 
         def mock_get_validated_directory_input(
@@ -185,9 +186,16 @@ class TestWriteConfig:
         ) -> str:
             return inputs[field]
 
+        def mock_get_config_input(
+            field: str, message: str, current_config: dict[str, Any], default: str = ""
+        ) -> str:
+            value = inputs.get(field, "")
+            return str(value) if value is not None else ""
+
         monkeypatch.setattr(cli, "get_validated_directory_input", mock_get_validated_directory_input)
         monkeypatch.setattr(cli, "get_config_boolean_input", mock_get_config_boolean_input)
         monkeypatch.setattr(cli, "get_validated_input", mock_get_validated_input)
+        monkeypatch.setattr(cli, "get_config_input", mock_get_config_input)
 
         # Mock click.echo to suppress output (can be called with or without msg)
         monkeypatch.setattr("click.echo", lambda msg=None, **kwargs: None)
@@ -249,9 +257,16 @@ class TestWriteConfig:
         ) -> str:
             return current_config.get(field, default)
 
+        def mock_get_config_input(
+            field: str, message: str, current_config: dict[str, Any], default: str = ""
+        ) -> str:
+            value = current_config.get(field, "")
+            return str(value) if value is not None else ""
+
         monkeypatch.setattr(cli, "get_validated_directory_input", mock_get_validated_directory_input)
         monkeypatch.setattr(cli, "get_config_boolean_input", mock_get_config_boolean_input)
         monkeypatch.setattr(cli, "get_validated_input", mock_get_validated_input)
+        monkeypatch.setattr(cli, "get_config_input", mock_get_config_input)
         monkeypatch.setattr("click.echo", lambda msg=None, **kwargs: None)
 
         cli.write_config(config_file)
@@ -282,6 +297,7 @@ class TestWriteConfig:
         monkeypatch.setattr(cli, "get_validated_directory_input", mock_input)
         monkeypatch.setattr(cli, "get_config_boolean_input", mock_bool_input)
         monkeypatch.setattr(cli, "get_validated_input", lambda *args, **kwargs: "markdown")
+        monkeypatch.setattr(cli, "get_config_input", lambda *args, **kwargs: "")
         monkeypatch.setattr("click.echo", lambda msg=None, **kwargs: None)
 
         cli.write_config(config_file)

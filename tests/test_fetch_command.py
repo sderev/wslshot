@@ -60,6 +60,7 @@ def config_file(fake_home: Path) -> Path:
                 "default_destination": "",
                 "auto_stage_enabled": False,
                 "default_output_format": "markdown",
+                "default_convert_to": None,
             }
         )
     )
@@ -1158,3 +1159,323 @@ def test_fetch_exit_code_0_on_success(
     )
 
     assert result.exit_code == 0
+
+
+# ============================================================================
+# 8. Image Format Conversion Tests
+# ============================================================================
+
+
+def create_real_image(directory: Path, name: str, format: str = "PNG") -> Path:
+    """Create a real image file that can be opened by PIL."""
+    from PIL import Image
+
+    screenshot = directory / name
+    img = Image.new("RGB", (100, 100), color="red")
+    img.save(screenshot, format)
+    return screenshot
+
+
+def test_fetch_with_convert_to_jpg(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with --convert-to jpg option."""
+    create_real_image(source_dir, "screenshot.png", "PNG")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--convert-to",
+            "jpg",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Verify JPG file was created in destination
+    jpg_files = list(dest_dir.glob("*.jpg"))
+    assert len(jpg_files) == 1
+    # Verify PNG file was removed (original deleted after conversion)
+    png_files = list(dest_dir.glob("*.png"))
+    assert len(png_files) == 0
+    # Verify output shows JPG extension
+    assert ".jpg" in result.output
+
+
+def test_fetch_with_convert_to_short_flag(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with -c short flag for conversion."""
+    create_real_image(source_dir, "screenshot.png", "PNG")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--destination", str(dest_dir), "-c", "webp"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    webp_files = list(dest_dir.glob("*.webp"))
+    assert len(webp_files) == 1
+
+
+def test_fetch_convert_to_invalid_format(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test fetch with invalid conversion format shows error."""
+    create_real_image(source_dir, "screenshot.png", "PNG")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--convert-to",
+            "bmp",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    # Click validates the choice before our code runs
+    assert result.exit_code != 0
+    assert "Invalid value for '--convert-to'" in result.output
+
+
+def test_fetch_convert_to_removes_original(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test that conversion removes the original file."""
+    create_real_image(source_dir, "test.jpg", "JPEG")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--convert-to",
+            "png",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Original JPG should be removed from destination
+    jpg_files = list(dest_dir.glob("*.jpg"))
+    assert len(jpg_files) == 0
+    # PNG should exist
+    png_files = list(dest_dir.glob("*.png"))
+    assert len(png_files) == 1
+
+
+def test_fetch_convert_to_with_git_staging(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that conversion works with git auto-staging."""
+    # Enable auto-staging in config
+    config_file.write_text(
+        json.dumps(
+            {
+                "default_source": str(source_dir),
+                "default_destination": str(dest_dir),
+                "auto_stage_enabled": True,
+                "default_output_format": "markdown",
+                "default_convert_to": None,
+            }
+        )
+    )
+
+    create_real_image(source_dir, "screenshot.png", "PNG")
+
+    # Mock git operations
+    monkeypatch.setattr(cli, "is_git_repo", lambda: True)
+    monkeypatch.setattr(cli, "get_git_root", lambda: dest_dir)
+
+    staged_files = []
+
+    def mock_stage(screenshots, git_root):
+        staged_files.extend(screenshots)
+
+    monkeypatch.setattr(cli, "stage_screenshots", mock_stage)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--convert-to", "jpg"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Verify converted file (JPG) was staged, not original PNG
+    assert len(staged_files) == 1
+    assert staged_files[0].suffix == ".jpg"
+
+
+def test_fetch_config_default_convert_to(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that config default_convert_to is used when no CLI option provided."""
+    # Update config with default_convert_to
+    config_file.write_text(
+        json.dumps(
+            {
+                "default_source": str(source_dir),
+                "default_destination": str(dest_dir),
+                "auto_stage_enabled": False,
+                "default_output_format": "markdown",
+                "default_convert_to": "webp",
+            }
+        )
+    )
+
+    create_real_image(source_dir, "screenshot.png", "PNG")
+
+    # Mock git detection to use config destination
+    monkeypatch.setattr(cli, "is_git_repo", lambda: False)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Verify WebP file was created (from config default)
+    webp_files = list(dest_dir.glob("*.webp"))
+    assert len(webp_files) == 1
+
+
+def test_fetch_convert_to_cli_overrides_config(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that CLI --convert-to overrides config default_convert_to."""
+    # Update config with default_convert_to
+    config_file.write_text(
+        json.dumps(
+            {
+                "default_source": str(source_dir),
+                "default_destination": str(dest_dir),
+                "auto_stage_enabled": False,
+                "default_output_format": "markdown",
+                "default_convert_to": "webp",
+            }
+        )
+    )
+
+    create_real_image(source_dir, "screenshot.png", "PNG")
+
+    # Mock git detection to use config destination
+    monkeypatch.setattr(cli, "is_git_repo", lambda: False)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--convert-to", "jpg"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # CLI option (jpg) should override config (webp)
+    jpg_files = list(dest_dir.glob("*.jpg"))
+    assert len(jpg_files) == 1
+    webp_files = list(dest_dir.glob("*.webp"))
+    assert len(webp_files) == 0
+
+
+def test_fetch_convert_to_output_path_correct(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test that output shows correct path with converted extension."""
+    create_real_image(source_dir, "test.png", "PNG")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--convert-to",
+            "jpg",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Output should show .jpg extension, not .png
+    assert ".jpg" in result.output
+    assert "screenshot_" in result.output
+
+
+def test_fetch_convert_to_no_conversion_when_same_format(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test that no conversion happens when already in target format."""
+    create_real_image(source_dir, "screenshot.png", "PNG")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--convert-to",
+            "png",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    # Should still have PNG file (no conversion needed)
+    png_files = list(dest_dir.glob("*.png"))
+    assert len(png_files) == 1

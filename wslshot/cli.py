@@ -30,6 +30,7 @@ from typing import Any
 
 import click
 from click_default_group import DefaultGroup
+from PIL import Image
 
 
 def atomic_write_json(path: Path, data: dict, mode: int = 0o600) -> None:
@@ -132,8 +133,14 @@ def wslshot():
         "Specify the output format (markdown, html, text). Overrides the default set in config."
     ),
 )
+@click.option(
+    "--convert-to",
+    "-c",
+    type=click.Choice(["png", "jpg", "jpeg", "webp", "gif"], case_sensitive=False),
+    help="Convert screenshot(s) to the specified format (png, jpg, webp, gif).",
+)
 @click.argument("image_path", type=click.Path(exists=True), required=False)
-def fetch(source, destination, count, output_format_new, output_format_deprecated, image_path):
+def fetch(source, destination, count, output_format_new, output_format_deprecated, convert_to, image_path):
     """
     Fetches and copies the latest screenshot(s) from the source to the specified destination.
 
@@ -205,6 +212,10 @@ def fetch(source, destination, count, output_format_new, output_format_deprecate
             click.echo(suggestion, err=True)
         sys.exit(1)
 
+    # Convert format
+    if convert_to is None and config.get("default_convert_to"):
+        convert_to = config["default_convert_to"]
+
     # If the user specified an image path, copy it to the destination directory.
     if image_path:
         try:
@@ -225,6 +236,22 @@ def fetch(source, destination, count, output_format_new, output_format_deprecate
         # Copy the screenshot(s) to the destination directory.
         source_screenshots = get_screenshots(source, count)
         copied_screenshots = copy_screenshots(source_screenshots, destination)
+
+    # Convert images if --convert-to option is provided
+    if convert_to:
+        converted_screenshots: tuple[Path, ...] = ()
+        for screenshot in copied_screenshots:
+            try:
+                converted_path = convert_image_format(screenshot, convert_to)
+                converted_screenshots += (converted_path,)
+            except ValueError as error:
+                click.echo(
+                    f"{click.style('Failed to convert image:', fg='red')} {screenshot}",
+                    err=True,
+                )
+                click.echo(f"{error}", err=True)
+                sys.exit(1)
+        copied_screenshots = converted_screenshots
 
     relative_screenshots: tuple[Path, ...] = ()
     git_root: Path | None = None
@@ -324,6 +351,72 @@ def generate_screenshot_name(screenshot_path: Path) -> str:
     return f"screenshot_{unique_fragment}{suffix}"
 
 
+def convert_image_format(source_path: Path, target_format: str) -> Path:
+    """
+    Convert an image to a different format.
+
+    Args:
+    - source_path: Path to the source image file.
+    - target_format: Target format (png, jpg, jpeg, webp, gif).
+
+    Returns:
+    - Path to the converted image (replaces original).
+
+    Raises:
+    - ValueError: If conversion fails or format is unsupported.
+    """
+    target_format = target_format.lower().replace(".", "")
+
+    # Normalize jpeg to jpg
+    if target_format == "jpeg":
+        target_format = "jpg"
+
+    # Validate target format
+    supported_formats = {"png", "jpg", "webp", "gif"}
+    if target_format not in supported_formats:
+        raise ValueError(
+            f"Unsupported target format: {target_format}. "
+            f"Supported formats: {', '.join(sorted(supported_formats))}"
+        )
+
+    # If already in target format, no conversion needed
+    if source_path.suffix.lower().replace(".", "") == target_format:
+        return source_path
+
+    try:
+        with Image.open(source_path) as img:
+            # Convert RGBA to RGB for JPEG (JPEG doesn't support transparency)
+            if target_format == "jpg" and img.mode in ("RGBA", "LA", "P"):
+                # Create white background
+                rgb_img = Image.new("RGB", img.size, (255, 255, 255))
+                if img.mode == "P":
+                    img = img.convert("RGBA")
+                rgb_img.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
+                img = rgb_img
+
+            # Create new filename with target extension
+            new_path = source_path.with_suffix(f".{target_format}")
+
+            # Save with appropriate format
+            if target_format == "jpg":
+                img.save(new_path, "JPEG", quality=95, optimize=True)
+            elif target_format == "png":
+                img.save(new_path, "PNG", optimize=True)
+            elif target_format == "webp":
+                img.save(new_path, "WEBP", quality=95)
+            elif target_format == "gif":
+                img.save(new_path, "GIF", optimize=True)
+
+            # Remove original file if conversion created a new file
+            if new_path != source_path:
+                source_path.unlink()
+
+            return new_path
+
+    except Exception as e:
+        raise ValueError(f"Failed to convert image: {e}") from e
+
+
 def stage_screenshots(screenshots: tuple[Path, ...], git_root: Path) -> None:
     """
     Automatically stage the screenshot(s) if the destination is a Git repo.
@@ -410,7 +503,8 @@ def get_config_file_path() -> Path:
             "default_source": "",
             "default_destination": "",
             "auto_stage_enabled": False,
-            "default_output_format": "markdown"
+            "default_output_format": "markdown",
+            "default_convert_to": None,
         }
         atomic_write_json(config_file_path, default_config, mode=0o600)
 
@@ -477,6 +571,10 @@ def write_config(config_file_path: Path) -> None:
             "Enter the default output format (markdown, html, text)",
             "markdown",
         ),
+        "default_convert_to": (
+            "Enter the default conversion format (png, jpg, webp, gif, or leave empty for none)",
+            None,
+        ),
     }
 
     # Prompt the user for configuration values.
@@ -494,6 +592,13 @@ def write_config(config_file_path: Path) -> None:
                 default,
                 options=["markdown", "html", "text", "plain_text"],
             )
+        elif field == "default_convert_to":
+            value = get_config_input(field, message, current_config, default or "")
+            # Normalize: empty string or whitespace-only to None
+            if value and value.strip():
+                config[field] = value.strip().lower()
+            else:
+                config[field] = None
         else:
             config[field] = get_config_input(field, message, current_config, default)
 
@@ -729,6 +834,32 @@ def set_default_output_format(output_format: str) -> None:
     atomic_write_json(config_file_path, config)
 
 
+def set_default_convert_to(convert_format: str | None) -> None:
+    """
+    Set the default image conversion format.
+
+    Args:
+        convert_format: The default conversion format (png, jpg, webp, gif, or None).
+    """
+    if convert_format and convert_format.strip():
+        convert_format = convert_format.lower()
+        if convert_format not in ["png", "jpg", "jpeg", "webp", "gif"]:
+            click.echo(
+                click.style(f"Invalid conversion format: {convert_format}", fg="red"),
+                err=True,
+            )
+            click.echo("Valid options are: png, jpg, webp, gif", err=True)
+            sys.exit(1)
+    else:
+        convert_format = None
+
+    config_file_path = get_config_file_path()
+    config = read_config(config_file_path)
+    config["default_convert_to"] = convert_format
+
+    atomic_write_json(config_file_path, config)
+
+
 @wslshot.command()
 @click.option("--source", "-s", help="Specify the default source directory for this operation.")
 @click.option(
@@ -746,7 +877,13 @@ def set_default_output_format(output_format: str) -> None:
     "-f",
     help="Set the default output format (markdown, HTML, text).",
 )
-def configure(source, destination, auto_stage_enabled, output_format):
+@click.option(
+    "--convert-to",
+    "-c",
+    type=click.Choice(["png", "jpg", "jpeg", "webp", "gif"], case_sensitive=False),
+    help="Set the default image conversion format.",
+)
+def configure(source, destination, auto_stage_enabled, output_format, convert_to):
     """
     Set the default source directory, control automatic staging, and set the default output format.
 
@@ -767,7 +904,7 @@ def configure(source, destination, auto_stage_enabled, output_format):
     - For VM users, you should configure a shared folder between Windows and the VM before proceeding.
     """
     # When no options are specified, ask the user for their preferences.
-    if all(x is None for x in (source, destination, auto_stage_enabled, output_format)):
+    if all(x is None for x in (source, destination, auto_stage_enabled, output_format, convert_to)):
         write_config(get_config_file_path())
 
     # Otherwise, set the specified options.
@@ -782,3 +919,6 @@ def configure(source, destination, auto_stage_enabled, output_format):
 
     if output_format:
         set_default_output_format(output_format)
+
+    if convert_to is not None:
+        set_default_convert_to(convert_to)
