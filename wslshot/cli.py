@@ -194,8 +194,14 @@ def wslshot():
     type=click.Choice(["png", "jpg", "jpeg", "webp", "gif"], case_sensitive=False),
     help="Convert screenshot(s) to the specified format (png, jpg, webp, gif).",
 )
+@click.option(
+    "--allow-symlinks",
+    is_flag=True,
+    default=False,
+    help="⚠️  Allow symlinks (WARNING: Security risk - only use with trusted paths).",
+)
 @click.argument("image_path", type=click.Path(exists=True), required=False)
-def fetch(source, destination, count, output_format, convert_to, image_path):
+def fetch(source, destination, count, output_format, convert_to, allow_symlinks, image_path):
     """
     Fetches and copies the latest screenshot(s) from the source to the specified destination.
 
@@ -213,9 +219,13 @@ def fetch(source, destination, count, output_format, convert_to, image_path):
         source = config["default_source"]
 
     try:
-        source = resolve_path_safely(source)
+        source = resolve_path_safely(source, check_symlink=not allow_symlinks)
     except ValueError as error:
         click.echo(f"{click.style('Security Error:', fg='red')} {error}", err=True)
+        if allow_symlinks:
+            click.echo("Symlink check was disabled with --allow-symlinks", err=True)
+        else:
+            click.echo("If you trust this path, use: --allow-symlinks", err=True)
         sys.exit(1)
     except FileNotFoundError:
         click.echo(
@@ -229,9 +239,13 @@ def fetch(source, destination, count, output_format, convert_to, image_path):
         destination = get_destination()
 
     try:
-        destination = resolve_path_safely(destination)
+        destination = resolve_path_safely(destination, check_symlink=not allow_symlinks)
     except ValueError as error:
         click.echo(f"{click.style('Security Error:', fg='red')} {error}", err=True)
+        if allow_symlinks:
+            click.echo("Symlink check was disabled with --allow-symlinks", err=True)
+        else:
+            click.echo("If you trust this path, use: --allow-symlinks", err=True)
         sys.exit(1)
     except FileNotFoundError:
         click.echo(
@@ -260,7 +274,7 @@ def fetch(source, destination, count, output_format, convert_to, image_path):
     if image_path:
         try:
             # SECURITY: Validate image_path is not a symlink (PERSO-192 - critical 6th location)
-            image_path_resolved = resolve_path_safely(image_path)
+            image_path_resolved = resolve_path_safely(image_path, check_symlink=not allow_symlinks)
 
             if not str(image_path_resolved).lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
                 raise ValueError("Invalid image format (supported formats: png, jpg, jpeg, gif).")
@@ -270,6 +284,8 @@ def fetch(source, destination, count, output_format, convert_to, image_path):
                 err=True,
             )
             click.echo(f"Source file: {image_path}", err=True)
+            if not allow_symlinks:
+                click.echo("If you trust this path, use: --allow-symlinks", err=True)
             sys.exit(1)
         except FileNotFoundError as error:
             click.echo(f"{click.style('Error:', fg='red')} Image file not found: {error}", err=True)

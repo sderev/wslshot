@@ -417,3 +417,89 @@ class TestAttackScenarios:
         # Verify /etc/passwd was NOT copied
         copied_files = list(destination.iterdir())
         assert len(copied_files) == 0, "/etc/passwd should not be copied"
+
+
+class TestAllowSymlinksFlag:
+    """Tests for `--allow-symlinks` CLI flag."""
+
+    def test_flag_allows_symlink_source(self, tmp_path):
+        """`--allow-symlinks` flag should allow symlink source directories."""
+        runner = CliRunner()
+
+        # Create real source with a file
+        real_source = tmp_path / "real_source"
+        real_source.mkdir()
+        test_file = real_source / "test.png"
+        test_file.write_bytes(b"fake png")
+
+        # Create destination
+        destination = tmp_path / "destination"
+        destination.mkdir()
+
+        # Create symlink to source
+        symlink_source = tmp_path / "symlink_source"
+        symlink_source.symlink_to(real_source)
+
+        # Run fetch with --allow-symlinks
+        result = runner.invoke(
+            fetch,
+            ["--source", str(symlink_source), "--destination", str(destination), "--allow-symlinks"],
+        )
+
+        # Should succeed (exit code 0)
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        assert "Security Error" not in result.output
+
+    def test_flag_allows_symlink_destination(self, tmp_path):
+        """`--allow-symlinks` flag should allow symlink destination directories."""
+        runner = CliRunner()
+
+        # Create source with a file
+        source = tmp_path / "source"
+        source.mkdir()
+        test_file = source / "test.png"
+        test_file.write_bytes(b"fake png")
+
+        # Create real destination
+        real_destination = tmp_path / "real_destination"
+        real_destination.mkdir()
+
+        # Create symlink to destination
+        symlink_destination = tmp_path / "symlink_destination"
+        symlink_destination.symlink_to(real_destination)
+
+        # Run fetch with --allow-symlinks
+        result = runner.invoke(
+            fetch,
+            ["--source", str(source), "--destination", str(symlink_destination), "--allow-symlinks"],
+        )
+
+        # Should succeed
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        assert "Security Error" not in result.output
+
+    def test_flag_allows_symlink_image_path(self, tmp_path):
+        """`--allow-symlinks` flag should allow symlink as direct file path."""
+        runner = CliRunner()
+
+        # Create real file
+        real_file = tmp_path / "real_screenshot.png"
+        real_file.write_bytes(b"fake png data")
+
+        # Create destination
+        destination = tmp_path / "destination"
+        destination.mkdir()
+
+        # Create symlink to file
+        symlink_file = tmp_path / "symlink_screenshot.png"
+        symlink_file.symlink_to(real_file)
+
+        # Run fetch with --allow-symlinks
+        result = runner.invoke(
+            fetch,
+            ["--destination", str(destination), "--allow-symlinks", str(symlink_file)],
+        )
+
+        # Should succeed
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        assert "Security Error" not in result.output
