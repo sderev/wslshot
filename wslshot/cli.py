@@ -83,6 +83,59 @@ def atomic_write_json(path: Path, data: dict, mode: int = 0o600) -> None:
         raise
 
 
+def resolve_path_safely(path_str: str, check_symlink: bool = True) -> Path:
+    """
+    Safely resolve a path without following symlinks.
+
+    This function prevents symlink following attacks (CWE-59) by validating
+    that neither the target path nor any component in its parent chain is a
+    symlink. This protects against attackers creating symlinks to sensitive
+    files (SSH keys, credentials) and tricking the application into copying
+    them.
+
+    Args:
+        path_str: The path to resolve (can include `~` for home directory)
+        check_symlink: If True, reject symlinks (default True for security)
+
+    Returns:
+        Resolved Path object (absolute path)
+
+    Raises:
+        ValueError: If path is a symlink and `check_symlink=True`
+        FileNotFoundError: If path doesn't exist
+
+    Example:
+        >>> resolve_path_safely("/home/user/screenshots")
+        PosixPath('/home/user/screenshots')
+
+        >>> resolve_path_safely("/tmp/symlink_to_ssh_key")
+        ValueError: Symlinks are not allowed: /tmp/symlink_to_ssh_key
+    """
+    # Expand user home directory (~)
+    path = Path(path_str).expanduser()
+
+    # Check if the target path itself is a symlink before resolving
+    if check_symlink and path.is_symlink():
+        raise ValueError(f"Symlinks are not allowed: {path_str}")
+
+    # Validate no symlinks exist in the parent directory chain BEFORE resolving
+    # This prevents attacks like: /tmp/link -> /home/user/.ssh, then /tmp/link/id_rsa
+    if check_symlink:
+        # Check each component in the path hierarchy (before resolution)
+        # Start from the path and work up to root
+        current = path.absolute()
+        while current != current.parent:
+            if current.is_symlink():
+                raise ValueError(f"Path contains symlink in parent chain: {current}")
+            current = current.parent
+
+    # Resolve to absolute path (will follow symlinks if they exist)
+    # strict=True ensures the path exists
+    resolved = path.resolve(strict=True)
+
+    return resolved
+
+
 def suggest_format(invalid_format: str, valid_formats: list[str]) -> str:
     """Suggest a similar format if user provides invalid input."""
     invalid_lower = invalid_format.lower()
@@ -160,7 +213,10 @@ def fetch(source, destination, count, output_format, convert_to, image_path):
         source = config["default_source"]
 
     try:
-        source = Path(source).resolve(strict=True)
+        source = resolve_path_safely(source)
+    except ValueError as error:
+        click.echo(f"{click.style('Security Error:', fg='red')} {error}", err=True)
+        sys.exit(1)
     except FileNotFoundError:
         click.echo(
             f"{click.style(f'Source directory {source} does not exist.', fg='red')}",
@@ -173,7 +229,10 @@ def fetch(source, destination, count, output_format, convert_to, image_path):
         destination = get_destination()
 
     try:
-        destination = Path(destination).resolve(strict=True)
+        destination = resolve_path_safely(destination)
+    except ValueError as error:
+        click.echo(f"{click.style('Security Error:', fg='red')} {error}", err=True)
+        sys.exit(1)
     except FileNotFoundError:
         click.echo(
             f"{click.style(f'Destination directory {destination} does not exist.', fg='red')}",
@@ -200,18 +259,23 @@ def fetch(source, destination, count, output_format, convert_to, image_path):
     # If the user specified an image path, copy it to the destination directory.
     if image_path:
         try:
-            if not image_path.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
+            # SECURITY: Validate image_path is not a symlink (PERSO-192 - critical 6th location)
+            image_path_resolved = resolve_path_safely(image_path)
+
+            if not str(image_path_resolved).lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
                 raise ValueError("Invalid image format (supported formats: png, jpg, jpeg, gif).")
         except ValueError as error:
             click.echo(
-                f"{click.style('An error occurred while fetching the screenshot(s).', fg='red')}",
+                f"{click.style('Security Error:', fg='red')} {error}",
                 err=True,
             )
-            click.echo(f"{error}", err=True)
             click.echo(f"Source file: {image_path}", err=True)
             sys.exit(1)
+        except FileNotFoundError as error:
+            click.echo(f"{click.style('Error:', fg='red')} Image file not found: {error}", err=True)
+            sys.exit(1)
 
-        image_path = (Path(image_path),)  # For compatibility with copy_screenshots()
+        image_path = (image_path_resolved,)  # For compatibility with copy_screenshots()
         copied_screenshots = copy_screenshots(image_path, destination)
     else:
         # Copy the screenshot(s) to the destination directory.
@@ -636,7 +700,12 @@ def get_validated_directory_input(field, message, current_config, default) -> st
             return default
 
         try:
-            return str(Path(directory).resolve(strict=True))
+            return str(resolve_path_safely(directory))
+        except ValueError as error:
+            click.echo(
+                click.style(f"Security Error: {error}", fg="red"),
+                err=True,
+            )
         except FileNotFoundError as error:
             click.echo(
                 click.style(f"Invalid {field.replace('_', ' ')}: {error}", fg="red"),
@@ -677,7 +746,10 @@ def set_default_source(source_str: str) -> None:
         source: The default source directory.
     """
     try:
-        source: str = str(Path(source_str).resolve(strict=True))
+        source: str = str(resolve_path_safely(source_str))
+    except ValueError as error:
+        click.echo(click.style(f"Security Error: {error}", fg="red"), err=True)
+        sys.exit(1)
     except FileNotFoundError as error:
         click.echo(click.style(f"Invalid source directory: {error}", fg="red"), err=True)
         sys.exit(1)
@@ -697,7 +769,10 @@ def set_default_destination(destination_str: str) -> None:
         destination: The default destination directory.
     """
     try:
-        destination: str = str(Path(destination_str).resolve(strict=True))
+        destination: str = str(resolve_path_safely(destination_str))
+    except ValueError as error:
+        click.echo(click.style(f"Security Error: {error}", fg="red"), err=True)
+        sys.exit(1)
     except FileNotFoundError as error:
         click.echo(click.style(f"Invalid destination directory: {error}", fg="red"), err=True)
         sys.exit(1)
