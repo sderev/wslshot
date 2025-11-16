@@ -25,6 +25,7 @@ import sys
 import tempfile
 import uuid
 from pathlib import Path
+from stat import S_ISREG
 from typing import Any
 
 import click
@@ -347,13 +348,24 @@ def get_screenshots(source: str, count: int) -> tuple[Path, ...]:
     """
     # Get the most recent screenshot(s) from the source directory.
     try:
-        # Collect files with different extensions
-        extensions = ("png", "jpg", "jpeg", "gif")
-        screenshots = [file for ext in extensions for file in Path(source).glob(f"*.{ext}")]
+        # Use scandir for efficient directory iteration (single directory scan)
+        # Stat each file exactly once and cache the result
+        file_stats = []
+        with os.scandir(source) as entries:
+            for entry in entries:
+                # Check extension before stat (cheap filter)
+                if Path(entry.name).suffix in ('.png', '.jpg', '.jpeg', '.gif'):
+                    file_path = Path(entry.path)
+                    try:
+                        # Stat once and check if it's a regular file
+                        stat_result = file_path.stat()
+                        if S_ISREG(stat_result.st_mode):
+                            file_stats.append((file_path, stat_result.st_mtime))
+                    except OSError:
+                        # Skip files we can't stat (broken symlinks, permission issues, etc.)
+                        pass
 
-        # Cache stat results and use heapq for efficient partial sorting
-        # O(N log count) instead of O(N log N) full sort
-        file_stats = [(file, file.stat().st_mtime) for file in screenshots]
+        # Use heapq for efficient partial sorting: O(N log count) instead of O(N log N)
         top_files = heapq.nlargest(count, file_stats, key=lambda x: x[1])
         screenshots = [file for file, _ in top_files]
 
