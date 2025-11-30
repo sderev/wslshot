@@ -32,6 +32,12 @@ import click
 from click_default_group import DefaultGroup
 from PIL import Image
 
+MAX_IMAGE_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50MB
+MAX_TOTAL_IMAGE_SIZE_BYTES = 200 * 1024 * 1024  # 200MB
+PNG_TRAILER = b"\x00\x00\x00\x00IEND\xAE\x42\x60\x82"
+JPEG_TRAILER = b"\xFF\xD9"
+GIF_TRAILER = b"\x3B"
+
 
 def atomic_write_json(path: Path, data: dict, mode: int = 0o600) -> None:
     """
@@ -135,6 +141,120 @@ def resolve_path_safely(path_str: str, check_symlink: bool = True) -> Path:
     resolved = path.resolve(strict=True)
 
     return resolved
+
+
+def validate_image_file(
+    file_path: Path,
+    *,
+    max_size_bytes: int | None = None,
+    file_size: int | None = None,
+) -> bool:
+    """
+    Validate file is actually an image by checking magic bytes.
+
+    This function prevents file content validation attacks (CWE-434) by
+    verifying that files are legitimate images, not malicious scripts or
+    executables renamed with image extensions.
+
+    Uses Pillow's `Image.verify()` to check magic bytes and file structure.
+    Also enforces a 50MB per-file size limit to prevent DoS attacks.
+
+    Args:
+        file_path: Path to file to validate
+
+    Returns:
+        bool: True if valid image file
+
+    Raises:
+        ValueError: If file is not a valid image or exceeds size limit
+
+    Example:
+        >>> validate_image_file(Path("/tmp/screenshot.png"))
+        True
+
+        >>> validate_image_file(Path("/tmp/malicious.png"))  # Actually a script
+        ValueError: File is not a valid image: malicious.png
+    The size check can be overridden for testing or configuration. Passing
+    `file_size` avoids re-statting the file when the caller already has that
+    information (e.g., during directory scans).
+    """
+    # Enforce per-file size limit to prevent DoS attacks
+    max_size = MAX_IMAGE_FILE_SIZE_BYTES if max_size_bytes is None else max_size_bytes
+    try:
+        size_value = file_size if file_size is not None else file_path.stat().st_size
+    except OSError as e:
+        raise ValueError(f"Cannot read file: {file_path.name}") from e
+
+    if max_size is not None and size_value > max_size:
+        raise ValueError(
+            f"File too large: {size_value / 1024 / 1024:.2f}MB "
+            f"(maximum: {max_size / 1024 / 1024:.0f}MB)"
+        )
+
+    # Validate magic bytes using Pillow
+    try:
+        with Image.open(file_path) as img:
+            # Read format BEFORE calling verify() - verify() invalidates the image object
+            img_format = img.format
+
+            # Check format is supported (PNG, JPEG, GIF)
+            if img_format not in ("PNG", "JPEG", "GIF"):
+                raise ValueError(
+                    f"Unsupported image format: {img_format} "
+                    f"(supported: PNG, JPEG, GIF)"
+                )
+
+            img.verify()  # Validates magic bytes and basic file structure
+
+        # Reject files with trailing payloads after the format trailer
+        file_bytes = file_path.read_bytes()
+        if img_format == "PNG" and not file_bytes.endswith(PNG_TRAILER):
+            raise ValueError(f"File contains trailing data after PNG trailer: {file_path.name}")
+        if img_format == "JPEG" and not file_bytes.endswith(JPEG_TRAILER):
+            raise ValueError(f"File contains trailing data after JPEG trailer: {file_path.name}")
+        if img_format == "GIF" and not file_bytes.endswith(GIF_TRAILER):
+            raise ValueError(f"File contains trailing data after GIF trailer: {file_path.name}")
+
+        return True
+
+    except Image.DecompressionBombError as e:
+        # Decompression bombs are images with huge dimensions but small file size
+        # (e.g., 1MB file that decompresses to 10GB). Pillow's default limit is
+        # 89,478,485 pixels (~178MB at 24-bit color). We catch this separately
+        # to provide a clear error message.
+        raise ValueError(
+            f"Image dimensions too large: {file_path.name} "
+            f"(suspected decompression bomb attack)"
+        ) from e
+    except (OSError, Image.UnidentifiedImageError) as e:
+        raise ValueError(f"File is not a valid image: {file_path.name}") from e
+
+
+def get_size_limits(config: dict[str, Any]) -> tuple[int, int | None]:
+    """
+    Resolve per-file and aggregate size limits from config (in MB).
+
+    A non-positive aggregate limit disables the total size cap to avoid
+    surprising failures for users with very large screenshot batches.
+    """
+    default_file_limit_mb = MAX_IMAGE_FILE_SIZE_BYTES // (1024 * 1024)
+    default_total_limit_mb = MAX_TOTAL_IMAGE_SIZE_BYTES // (1024 * 1024)
+
+    file_limit_mb = config.get("max_file_size_mb", default_file_limit_mb)
+    total_limit_mb = config.get("max_total_size_mb", default_total_limit_mb)
+
+    file_limit_bytes = MAX_IMAGE_FILE_SIZE_BYTES
+    if isinstance(file_limit_mb, (int, float)) and file_limit_mb > 0:
+        file_limit_bytes = int(file_limit_mb * 1024 * 1024)
+
+    total_limit_bytes: int | None = MAX_TOTAL_IMAGE_SIZE_BYTES
+    if isinstance(total_limit_mb, (int, float)):
+        if total_limit_mb > 0:
+            total_limit_bytes = int(total_limit_mb * 1024 * 1024)
+        else:
+            total_limit_bytes = None
+
+    return file_limit_bytes, total_limit_bytes
 
 
 def suggest_format(invalid_format: str, valid_formats: list[str]) -> str:
