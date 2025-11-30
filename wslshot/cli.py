@@ -38,6 +38,9 @@ PNG_TRAILER = b"\x00\x00\x00\x00IEND\xAE\x42\x60\x82"
 JPEG_TRAILER = b"\xFF\xD9"
 GIF_TRAILER = b"\x3B"
 
+# Valid output formats
+VALID_OUTPUT_FORMATS = ("markdown", "html", "text")
+
 
 def atomic_write_json(path: Path, data: dict, mode: int = 0o600) -> None:
     """
@@ -380,10 +383,10 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
     if output_format is None:
         output_format = config["default_output_format"]
 
-    if output_format.casefold() not in ("markdown", "html", "text"):
+    if output_format.casefold() not in VALID_OUTPUT_FORMATS:
         click.echo(f"Invalid output format: {output_format}", err=True)
-        click.echo("Valid options are: markdown, html, text", err=True)
-        suggestion = suggest_format(output_format, ["markdown", "html", "text"])
+        click.echo(f"Valid options are: {', '.join(VALID_OUTPUT_FORMATS)}", err=True)
+        suggestion = suggest_format(output_format, list(VALID_OUTPUT_FORMATS))
         if suggestion:
             click.echo(suggestion, err=True)
         sys.exit(1)
@@ -775,25 +778,26 @@ def print_formatted_path(
             sys.exit(1)
 
 
-def get_config_file_path() -> Path:
+def get_config_file_path(*, create_if_missing: bool = True) -> Path:
     """
-    Create the configuration file.
+    Get the configuration file path, optionally creating the file.
     """
     config_file_path = Path.home() / ".config" / "wslshot" / "config.json"
-    config_file_path.parent.mkdir(parents=True, exist_ok=True)
+    if create_if_missing:
+        config_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if not config_file_path.exists():
-        # Write default config without interactive prompts
-        default_config = {
-            "default_source": "",
-            "default_destination": "",
-            "auto_stage_enabled": False,
-            "default_output_format": "markdown",
-            "default_convert_to": None,
-            "max_file_size_mb": MAX_IMAGE_FILE_SIZE_BYTES // (1024 * 1024),
-            "max_total_size_mb": MAX_TOTAL_IMAGE_SIZE_BYTES // (1024 * 1024),
-        }
-        atomic_write_json(config_file_path, default_config, mode=0o600)
+        if not config_file_path.exists():
+            # Write default config without interactive prompts
+            default_config = {
+                "default_source": "",
+                "default_destination": "",
+                "auto_stage_enabled": False,
+                "default_output_format": "markdown",
+                "default_convert_to": None,
+                "max_file_size_mb": MAX_IMAGE_FILE_SIZE_BYTES // (1024 * 1024),
+                "max_total_size_mb": MAX_TOTAL_IMAGE_SIZE_BYTES // (1024 * 1024),
+            }
+            atomic_write_json(config_file_path, default_config, mode=0o600)
 
     return config_file_path
 
@@ -820,6 +824,72 @@ def read_config(config_file_path: Path) -> dict[str, Any]:
             config = json.load(file)
 
     return config
+
+
+def migrate_config(config_path: Path, *, dry_run: bool = False) -> dict[str, Any]:
+    """
+    Migrate legacy config values to current format.
+
+    Migrations performed:
+    - `plain_text` → `text` in `default_output_format`
+
+    Args:
+        config_path: Path to config file
+        dry_run: If True, return changes without writing
+
+    Returns:
+        Dictionary with migration report:
+        {
+            "migrated": bool,
+            "changes": list[str],
+            "config": dict
+        }
+    """
+    try:
+        with open(config_path, "r", encoding="UTF-8") as f:
+            config = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        return {
+            "migrated": False,
+            "changes": [],
+            "error": f"Cannot read config: {e}",
+            "config": {},
+        }
+
+    # Validate config is a dictionary
+    if not isinstance(config, dict):
+        return {
+            "migrated": False,
+            "changes": [],
+            "error": f"Invalid config format: expected object, got {type(config).__name__}",
+            "config": {},
+        }
+
+    changes = []
+
+    # Migration: plain_text → text
+    default_output_format = config.get("default_output_format")
+    if isinstance(default_output_format, str) and default_output_format.casefold() == "plain_text":
+        config["default_output_format"] = "text"
+        changes.append("default_output_format: 'plain_text' → 'text'")
+
+    # Write migrated config
+    if changes and not dry_run:
+        try:
+            atomic_write_json(config_path, config)
+        except OSError as e:
+            return {
+                "migrated": False,
+                "changes": changes,
+                "error": f"Cannot write config: {e}",
+                "config": config,
+            }
+
+    return {
+        "migrated": bool(changes) and not dry_run,
+        "changes": changes,
+        "config": config,
+    }
 
 
 def write_config(config_file_path: Path) -> None:
@@ -885,7 +955,7 @@ def write_config(config_file_path: Path) -> None:
                 message,
                 current_config,
                 default,
-                options=["markdown", "html", "text"],
+                options=list(VALID_OUTPUT_FORMATS),
             )
         elif field == "default_convert_to":
             value = get_config_input(field, message, current_config, default or "")
@@ -1129,10 +1199,10 @@ def set_default_output_format(output_format: str) -> None:
     Args:
         output_format: The default output format.
     """
-    if output_format.casefold() not in ["markdown", "html", "text"]:
+    if output_format.casefold() not in VALID_OUTPUT_FORMATS:
         click.echo(click.style(f"Invalid output format: {output_format}", fg="red"), err=True)
-        click.echo("Valid options are: markdown, html, text", err=True)
-        suggestion = suggest_format(output_format, ["markdown", "html", "text"])
+        click.echo(f"Valid options are: {', '.join(VALID_OUTPUT_FORMATS)}", err=True)
+        suggestion = suggest_format(output_format, list(VALID_OUTPUT_FORMATS))
         if suggestion:
             click.echo(click.style(suggestion, fg="yellow"), err=True)
         sys.exit(1)
@@ -1232,3 +1302,59 @@ def configure(source, destination, auto_stage_enabled, output_format, convert_to
 
     if convert_to is not None:
         set_default_convert_to(convert_to)
+
+
+@wslshot.command(name="migrate-config")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Preview changes without applying them.",
+)
+def migrate_config_cmd(dry_run):
+    """
+    Migrate configuration file to current format.
+
+    Converts legacy values to current equivalents:
+    - 'plain_text' → 'text' in output format
+
+    Use --dry-run to preview changes before applying.
+    """
+    config_path = get_config_file_path(create_if_missing=False)
+
+    if not config_path.exists():
+        click.echo(
+            click.style("No config file found. Nothing to migrate.", fg="yellow"),
+            err=True,
+        )
+        sys.exit(0)
+
+    click.echo(f"Config file: {config_path}")
+    click.echo()
+
+    result = migrate_config(config_path, dry_run=dry_run)
+
+    if "error" in result:
+        click.echo(click.style(f"Error: {result['error']}", fg="red"), err=True)
+        sys.exit(1)
+
+    if not result["changes"]:
+        click.echo(click.style("✓ Config is up to date. No migration needed.", fg="green"))
+        sys.exit(0)
+
+    # Show changes
+    if dry_run:
+        click.echo(click.style("Preview of changes (dry-run):", fg="yellow"))
+    else:
+        click.echo(click.style("Applied changes:", fg="green"))
+
+    for change in result["changes"]:
+        prefix = "  [would change]" if dry_run else "  ✓"
+        click.echo(f"{prefix} {change}")
+
+    if dry_run:
+        click.echo()
+        click.echo("Run without --dry-run to apply these changes.")
+    else:
+        click.echo()
+        click.echo(click.style("Migration completed successfully.", fg="green"))
