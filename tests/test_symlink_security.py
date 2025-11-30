@@ -13,6 +13,7 @@ import pytest
 from click.testing import CliRunner
 
 from wslshot.cli import resolve_path_safely, fetch, configure
+from conftest import create_test_image
 
 
 class TestResolvePathSafely:
@@ -167,7 +168,7 @@ class TestFetchCommandSymlinkSecurity:
 
         # Create real file and destination
         real_file = tmp_path / "real_screenshot.png"
-        real_file.write_bytes(b"fake png data")
+        create_test_image(real_file)
         destination = tmp_path / "destination"
         destination.mkdir()
 
@@ -193,7 +194,7 @@ class TestFetchCommandSymlinkSecurity:
         real_dir = tmp_path / "real_dir"
         real_dir.mkdir()
         real_file = real_dir / "screenshot.png"
-        real_file.write_bytes(b"fake png data")
+        create_test_image(real_file)
         destination = tmp_path / "destination"
         destination.mkdir()
 
@@ -430,7 +431,7 @@ class TestAllowSymlinksFlag:
         real_source = tmp_path / "real_source"
         real_source.mkdir()
         test_file = real_source / "test.png"
-        test_file.write_bytes(b"fake png")
+        create_test_image(test_file)
 
         # Create destination
         destination = tmp_path / "destination"
@@ -458,7 +459,7 @@ class TestAllowSymlinksFlag:
         source = tmp_path / "source"
         source.mkdir()
         test_file = source / "test.png"
-        test_file.write_bytes(b"fake png")
+        create_test_image(test_file)
 
         # Create real destination
         real_destination = tmp_path / "real_destination"
@@ -484,7 +485,7 @@ class TestAllowSymlinksFlag:
 
         # Create real file
         real_file = tmp_path / "real_screenshot.png"
-        real_file.write_bytes(b"fake png data")
+        create_test_image(real_file)
 
         # Create destination
         destination = tmp_path / "destination"

@@ -334,6 +334,7 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
     - output: The output format.
     """
     config = read_config(get_config_file_path())
+    max_file_size_bytes, max_total_size_bytes = get_size_limits(config)
 
     # Source directory
     if source is None:
@@ -397,15 +398,19 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
             # SECURITY: Validate image_path is not a symlink (PERSO-192 - critical 6th location)
             image_path_resolved = resolve_path_safely(image_path, check_symlink=not allow_symlinks)
 
-            if not str(image_path_resolved).lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
-                raise ValueError("Invalid image format (supported formats: png, jpg, jpeg, gif).")
+            # SECURITY: Validate file content, not just extension (PERSO-193 - CWE-434)
+            validate_image_file(image_path_resolved, max_size_bytes=max_file_size_bytes)
         except ValueError as error:
             click.echo(
                 f"{click.style('Security Error:', fg='red')} {error}",
                 err=True,
             )
             click.echo(f"Source file: {image_path}", err=True)
-            if not allow_symlinks:
+
+            # Only suggest --allow-symlinks for symlink-related errors
+            # Content validation errors should not suggest disabling symlink checks
+            error_msg = str(error).lower()
+            if not allow_symlinks and "symlink" in error_msg:
                 click.echo("If you trust this path, use: --allow-symlinks", err=True)
             sys.exit(1)
         except FileNotFoundError as error:
@@ -413,11 +418,21 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
             sys.exit(1)
 
         image_path = (image_path_resolved,)  # For compatibility with copy_screenshots()
-        copied_screenshots = copy_screenshots(image_path, destination)
+        copied_screenshots = copy_screenshots(
+            image_path,
+            destination,
+            max_file_size_bytes=max_file_size_bytes,
+            max_total_size_bytes=max_total_size_bytes,
+        )
     else:
         # Copy the screenshot(s) to the destination directory.
-        source_screenshots = get_screenshots(source, count)
-        copied_screenshots = copy_screenshots(source_screenshots, destination)
+        source_screenshots = get_screenshots(source, count, max_file_size_bytes=max_file_size_bytes)
+        copied_screenshots = copy_screenshots(
+            source_screenshots,
+            destination,
+            max_file_size_bytes=max_file_size_bytes,
+            max_total_size_bytes=max_total_size_bytes,
+        )
 
     # Convert images if --convert-to option is provided
     if convert_to:
@@ -455,13 +470,14 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
         print_formatted_path(output_format, copied_screenshots, relative_to_repo=False)
 
 
-def get_screenshots(source: str, count: int) -> tuple[Path, ...]:
+def get_screenshots(source: str, count: int, max_file_size_bytes: int | None = None) -> tuple[Path, ...]:
     """
     Get the most recent screenshot(s) from the source directory.
 
     Args:
     - source: The source directory.
     - count: The number of screenshots to fetch.
+    - max_file_size_bytes: Per-file size cap in bytes (None uses default).
 
     Returns:
     - The screenshot(s)'s path.
@@ -480,7 +496,20 @@ def get_screenshots(source: str, count: int) -> tuple[Path, ...]:
                         # Stat once and check if it's a regular file
                         stat_result = file_path.stat()
                         if S_ISREG(stat_result.st_mode):
-                            file_stats.append((file_path, stat_result.st_mtime))
+                            # SECURITY: Validate file content, not just extension (PERSO-193 - CWE-434)
+                            try:
+                                validate_image_file(
+                                    file_path,
+                                    max_size_bytes=max_file_size_bytes,
+                                    file_size=stat_result.st_size,
+                                )
+                                file_stats.append((file_path, stat_result.st_mtime))
+                            except ValueError as e:
+                                # Graceful degradation: skip invalid files with warning
+                                click.echo(
+                                    f"{click.style('Warning:', fg='yellow')} Skipping invalid file: {e}",
+                                    err=True,
+                                )
                     except OSError:
                         # Skip files we can't stat (broken symlinks, permission issues, etc.)
                         pass
@@ -508,7 +537,13 @@ def get_screenshots(source: str, count: int) -> tuple[Path, ...]:
     return tuple(screenshots)
 
 
-def copy_screenshots(screenshots: tuple[Path, ...], destination: str) -> tuple[Path, ...]:
+def copy_screenshots(
+    screenshots: tuple[Path, ...],
+    destination: str,
+    *,
+    max_file_size_bytes: int | None = MAX_IMAGE_FILE_SIZE_BYTES,
+    max_total_size_bytes: int | None = MAX_TOTAL_IMAGE_SIZE_BYTES,
+) -> tuple[Path, ...]:
     """
     Copy the screenshot(s) to the destination directory
     and rename them with unique filesystem-friendly names.
@@ -516,13 +551,57 @@ def copy_screenshots(screenshots: tuple[Path, ...], destination: str) -> tuple[P
     Args:
     - screenshots: A tuple of Path objects representing the screenshot(s) to copy.
     - destination: The path to the destination directory.
+    - max_file_size_bytes: Per-file size cap (None uses default).
+    - max_total_size_bytes: Aggregate size cap (None disables cap).
 
     Returns:
     - A tuple of Path objects representing the new locations of the copied screenshot(s).
     """
     copied_screenshots: tuple[Path, ...] = ()
 
+    # SECURITY: Enforce aggregate size limit to prevent DoS (PERSO-193)
+    total_size = 0
+    total_limit = max_total_size_bytes
+    per_file_limit = max_file_size_bytes
+
     for screenshot in screenshots:
+        try:
+            stat_result = screenshot.stat()
+        except OSError as e:
+            click.echo(
+                f"{click.style('Warning:', fg='yellow')} Skipping unreadable file: {screenshot} ({e})",
+                err=True,
+            )
+            continue
+
+        # SECURITY: Defense-in-depth validation before copying (PERSO-193 - CWE-434)
+        try:
+            validate_image_file(
+                screenshot,
+                max_size_bytes=per_file_limit,
+                file_size=stat_result.st_size,
+            )
+
+            # Check total size limit
+            total_size += stat_result.st_size
+
+            if total_limit is not None and total_size > total_limit:
+                click.echo(
+                    f"{click.style('Warning:', fg='yellow')} Total size limit "
+                    f"({total_limit / 1024 / 1024:.0f}MB) exceeded. "
+                    f"Skipping remaining files.",
+                    err=True,
+                )
+                break
+
+        except ValueError as e:
+            # Graceful degradation: skip invalid files with warning
+            click.echo(
+                f"{click.style('Warning:', fg='yellow')} Skipping invalid file: {e}",
+                err=True,
+            )
+            continue
+
         new_screenshot_name = generate_screenshot_name(screenshot)
         new_screenshot_path = Path(destination) / new_screenshot_name
         shutil.copy(screenshot, new_screenshot_path)
@@ -711,6 +790,8 @@ def get_config_file_path() -> Path:
             "auto_stage_enabled": False,
             "default_output_format": "markdown",
             "default_convert_to": None,
+            "max_file_size_mb": MAX_IMAGE_FILE_SIZE_BYTES // (1024 * 1024),
+            "max_total_size_mb": MAX_TOTAL_IMAGE_SIZE_BYTES // (1024 * 1024),
         }
         atomic_write_json(config_file_path, default_config, mode=0o600)
 
@@ -781,6 +862,14 @@ def write_config(config_file_path: Path) -> None:
             "Enter the default conversion format (png, jpg, webp, gif, or leave empty for none)",
             None,
         ),
+        "max_file_size_mb": (
+            "Enter the maximum allowed file size in MB (per file, e.g., 50)",
+            MAX_IMAGE_FILE_SIZE_BYTES // (1024 * 1024),
+        ),
+        "max_total_size_mb": (
+            "Enter the maximum total size in MB for a batch (<=0 disables the limit)",
+            MAX_TOTAL_IMAGE_SIZE_BYTES // (1024 * 1024),
+        ),
     }
 
     # Prompt the user for configuration values.
@@ -805,6 +894,12 @@ def write_config(config_file_path: Path) -> None:
                 config[field] = value.strip().lower()
             else:
                 config[field] = None
+        elif field in ("max_file_size_mb", "max_total_size_mb"):
+            value = get_config_input(field, message, current_config, default)
+            try:
+                config[field] = int(value)
+            except (TypeError, ValueError):
+                config[field] = default
         else:
             config[field] = get_config_input(field, message, current_config, default)
 

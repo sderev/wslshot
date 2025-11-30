@@ -21,6 +21,7 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 from wslshot import cli
+from conftest import create_test_image
 
 # ============================================================================
 # Fixtures and Helpers
@@ -68,9 +69,9 @@ def config_file(fake_home: Path) -> Path:
 
 
 def create_screenshot(directory: Path, name: str) -> Path:
-    """Create a fake screenshot file."""
+    """Create a real test screenshot file."""
     screenshot = directory / name
-    screenshot.write_bytes(b"fake image data")
+    create_test_image(screenshot)
     return screenshot
 
 
@@ -168,7 +169,7 @@ def test_fetch_with_count_3(
     for i in range(3):
         screenshot = create_screenshot(source_dir, f"screenshot_{i}.png")
         # Touch to ensure different modification times
-        screenshot.touch()
+        create_test_image(screenshot)
 
     result = runner.invoke(
         cli.wslshot,
@@ -552,7 +553,8 @@ def test_fetch_rejects_txt_file(
     )
 
     assert result.exit_code == 1
-    assert "Invalid image format" in result.output
+    # New validation provides more accurate error message
+    assert "not a valid image" in result.output
 
 
 def test_fetch_rejects_pdf_file(
@@ -573,7 +575,8 @@ def test_fetch_rejects_pdf_file(
     )
 
     assert result.exit_code == 1
-    assert "Invalid image format" in result.output
+    # New validation provides more accurate error message
+    assert "not a valid image" in result.output
 
 
 def test_fetch_handles_uppercase_extensions(
@@ -619,8 +622,8 @@ def test_fetch_error_message_for_unsupported_format(
     )
 
     assert result.exit_code == 1
-    assert "Invalid image format" in result.output
-    assert "supported formats: png, jpg, jpeg, gif" in result.output
+    # New validation provides more accurate error message
+    assert "not a valid image" in result.output
 
 
 # ============================================================================

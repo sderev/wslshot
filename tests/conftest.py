@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Iterator
 
 import pytest
+from PIL import Image
 
 
 @pytest.fixture
@@ -29,3 +30,29 @@ def temp_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """
     monkeypatch.chdir(tmp_path)
     return tmp_path
+
+
+def create_test_image(path: Path, format: str = "PNG") -> Path:
+    """
+    Create a valid test image file.
+
+    Args:
+        path: Path where the image should be created
+        format: Image format (PNG, JPEG, GIF)
+
+    Returns:
+        Path to the created image
+    """
+    # Determine format from extension if not explicitly provided
+    suffix = path.suffix.lower()
+    if suffix in ('.jpg', '.jpeg'):
+        format = "JPEG"
+    elif suffix == '.gif':
+        format = "GIF"
+    else:
+        format = "PNG"
+
+    # Create a small valid image
+    img = Image.new("RGB", (10, 10), color="blue")
+    img.save(path, format)
+    return path

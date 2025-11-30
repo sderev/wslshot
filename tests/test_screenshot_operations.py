@@ -7,6 +7,7 @@ from uuid import UUID
 
 import pytest
 from wslshot import cli
+from conftest import create_test_image
 
 # ==================== Finding Screenshots Tests ====================
 
@@ -17,7 +18,7 @@ def test_get_screenshots_finds_png_files(tmp_path: Path) -> None:
     source.mkdir()
 
     screenshot = source / "Screenshot 2024-01-15.png"
-    screenshot.touch()
+    create_test_image(screenshot)
 
     result = cli.get_screenshots(source, count=1)
 
@@ -31,7 +32,7 @@ def test_get_screenshots_finds_jpg_files(tmp_path: Path) -> None:
     source.mkdir()
 
     screenshot = source / "photo.jpg"
-    screenshot.touch()
+    create_test_image(screenshot)
 
     result = cli.get_screenshots(source, count=1)
 
@@ -45,7 +46,7 @@ def test_get_screenshots_finds_jpeg_files(tmp_path: Path) -> None:
     source.mkdir()
 
     screenshot = source / "image.jpeg"
-    screenshot.touch()
+    create_test_image(screenshot)
 
     result = cli.get_screenshots(source, count=1)
 
@@ -59,7 +60,7 @@ def test_get_screenshots_finds_gif_files(tmp_path: Path) -> None:
     source.mkdir()
 
     screenshot = source / "animated.gif"
-    screenshot.touch()
+    create_test_image(screenshot)
 
     result = cli.get_screenshots(source, count=1)
 
@@ -78,13 +79,13 @@ def test_get_screenshots_finds_multiple_extensions(tmp_path: Path) -> None:
     gif_file = source / "image4.gif"
 
     # Create files with different timestamps
-    png_file.touch()
+    create_test_image(png_file)
     time.sleep(0.01)
-    jpg_file.touch()
+    create_test_image(jpg_file)
     time.sleep(0.01)
-    jpeg_file.touch()
+    create_test_image(jpeg_file)
     time.sleep(0.01)
-    gif_file.touch()
+    create_test_image(gif_file)
 
     result = cli.get_screenshots(source, count=4)
 
@@ -102,11 +103,11 @@ def test_get_screenshots_sorts_by_modification_time(tmp_path: Path) -> None:
     middle = source / "middle.png"
     newest = source / "newest.png"
 
-    oldest.touch()
+    create_test_image(oldest)
     time.sleep(0.01)
-    middle.touch()
+    create_test_image(middle)
     time.sleep(0.01)
-    newest.touch()
+    create_test_image(newest)
 
     result = cli.get_screenshots(source, count=3)
 
@@ -123,7 +124,7 @@ def test_get_screenshots_returns_exactly_count_files(tmp_path: Path) -> None:
 
     for i in range(10):
         screenshot = source / f"screenshot_{i}.png"
-        screenshot.touch()
+        create_test_image(screenshot)
         time.sleep(0.01)
 
     result = cli.get_screenshots(source, count=5)
@@ -139,9 +140,9 @@ def test_get_screenshots_with_count_one_returns_most_recent(tmp_path: Path) -> N
     older = source / "older.png"
     newer = source / "newer.png"
 
-    older.touch()
+    create_test_image(older)
     time.sleep(0.01)
-    newer.touch()
+    create_test_image(newer)
 
     result = cli.get_screenshots(source, count=1)
 
@@ -159,7 +160,7 @@ def test_get_screenshots_with_count_three_returns_three_most_recent_in_order(
     files = []
     for i in range(5):
         screenshot = source / f"screenshot_{i}.png"
-        screenshot.touch()
+        create_test_image(screenshot)
         files.append(screenshot)
         time.sleep(0.01)
 
@@ -180,8 +181,8 @@ def test_get_screenshots_ignores_non_image_files(tmp_path: Path) -> None:
     # Create image files
     png_file = source / "image.png"
     jpg_file = source / "photo.jpg"
-    png_file.touch()
-    jpg_file.touch()
+    create_test_image(png_file)
+    create_test_image(jpg_file)
 
     # Create non-image files
     txt_file = source / "readme.txt"
@@ -205,14 +206,14 @@ def test_get_screenshots_handles_uppercase_extensions(tmp_path: Path) -> None:
     # Create lowercase extension files
     lowercase_png = source / "lowercase.png"
     lowercase_jpg = source / "lowercase.jpg"
-    lowercase_png.touch()
-    lowercase_jpg.touch()
+    create_test_image(lowercase_png)
+    create_test_image(lowercase_jpg)
 
     # Create uppercase extension files (should be ignored based on the code)
     uppercase_png = source / "UPPERCASE.PNG"
     uppercase_jpg = source / "UPPERCASE.JPG"
-    uppercase_png.touch()
-    uppercase_jpg.touch()
+    create_test_image(uppercase_png)
+    create_test_image(uppercase_jpg)
 
     # The code only globs for lowercase extensions, so uppercase files are ignored
     result = cli.get_screenshots(source, count=2)
@@ -264,7 +265,7 @@ def test_get_screenshots_raises_error_when_count_exceeds_available(
     # Create only 2 files
     for i in range(2):
         screenshot = source / f"screenshot_{i}.png"
-        screenshot.touch()
+        create_test_image(screenshot)
 
     # Mock sys.exit to capture the exit call
     exit_code = []
@@ -306,14 +307,15 @@ def test_copy_screenshots_copies_file_to_destination(tmp_path: Path) -> None:
     destination.mkdir()
 
     screenshot = source / "screenshot.png"
-    screenshot.write_bytes(b"fake image data")
+    create_test_image(screenshot)
 
     result = cli.copy_screenshots((screenshot,), destination)
 
     assert len(result) == 1
     assert result[0].exists()
     assert result[0].parent == destination
-    assert result[0].read_bytes() == b"fake image data"
+    # Verify it's a copy (different path, same content)
+    assert result[0].read_bytes() == screenshot.read_bytes()
 
 
 def test_copy_screenshots_generates_unique_uuid_filenames(
@@ -326,7 +328,7 @@ def test_copy_screenshots_generates_unique_uuid_filenames(
     destination.mkdir()
 
     screenshot = source / "screenshot.png"
-    screenshot.write_bytes(b"data")
+    create_test_image(screenshot)
 
     # Mock uuid.uuid4 to return a predictable UUID
     fake_uuid = UUID("12345678-1234-5678-1234-567812345678")
@@ -354,7 +356,7 @@ def test_copy_screenshots_preserves_file_extensions(
 
     for ext in extensions:
         screenshot = source / f"image{ext}"
-        screenshot.write_bytes(b"data")
+        create_test_image(screenshot)
 
         result = cli.copy_screenshots((screenshot,), destination)
 
@@ -373,7 +375,7 @@ def test_copy_screenshots_handles_multiple_files(
     screenshots = []
     for i in range(3):
         screenshot = source / f"screenshot_{i}.png"
-        screenshot.write_bytes(b"data")
+        create_test_image(screenshot)
         screenshots.append(screenshot)
 
     # Mock uuid.uuid4 to return different UUIDs for each call
@@ -408,7 +410,7 @@ def test_copy_screenshots_returns_tuple_of_path_objects(tmp_path: Path) -> None:
     destination.mkdir()
 
     screenshot = source / "screenshot.png"
-    screenshot.write_bytes(b"data")
+    create_test_image(screenshot)
 
     result = cli.copy_screenshots((screenshot,), destination)
 
@@ -423,15 +425,15 @@ def test_copy_screenshots_copied_files_exist_and_readable(tmp_path: Path) -> Non
     source.mkdir()
     destination.mkdir()
 
-    content = b"test image content"
     screenshot = source / "screenshot.png"
-    screenshot.write_bytes(content)
+    create_test_image(screenshot)
 
     result = cli.copy_screenshots((screenshot,), destination)
 
     assert result[0].exists()
     assert result[0].is_file()
-    assert result[0].read_bytes() == content
+    # Verify content matches original
+    assert result[0].read_bytes() == screenshot.read_bytes()
 
 
 def test_copy_screenshots_original_files_unchanged(tmp_path: Path) -> None:
@@ -441,19 +443,76 @@ def test_copy_screenshots_original_files_unchanged(tmp_path: Path) -> None:
     source.mkdir()
     destination.mkdir()
 
-    content = b"original content"
     screenshot = source / "screenshot.png"
-    screenshot.write_bytes(content)
+    create_test_image(screenshot)
 
-    # Get original mtime
+    # Get original content and mtime
+    original_content = screenshot.read_bytes()
     original_mtime = screenshot.stat().st_mtime
 
     cli.copy_screenshots((screenshot,), destination)
 
     # Verify original file is unchanged
     assert screenshot.exists()
-    assert screenshot.read_bytes() == content
+    assert screenshot.read_bytes() == original_content
     assert screenshot.stat().st_mtime == original_mtime
+
+
+def test_copy_screenshots_honors_aggregate_cap(tmp_path: Path, capsys) -> None:
+    """copy_screenshots enforces configurable total size limit without huge fixtures."""
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+
+    screenshots = []
+    sizes: list[int] = []
+
+    for i in range(3):
+        screenshot = source / f"small_{i}.png"
+        create_test_image(screenshot)
+        sizes.append(screenshot.stat().st_size)
+        screenshots.append(screenshot)
+
+    # Set limit so only the first file fits
+    size_limit = sizes[0] + sizes[1] - 1
+
+    copied = cli.copy_screenshots(
+        tuple(screenshots),
+        destination,
+        max_total_size_bytes=size_limit,
+    )
+
+    captured = capsys.readouterr()
+    assert "Total size limit" in captured.err
+    assert len(copied) == 1, "Should stop copying once limit is crossed"
+    assert copied[0].exists()
+
+
+def test_copy_screenshots_respects_disabled_aggregate_cap(tmp_path: Path, capsys) -> None:
+    """Disabling total size cap copies all files and emits no cap warning."""
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    destination.mkdir()
+
+    screenshots = []
+    for i in range(3):
+        screenshot = source / f"screenshot_{i}.png"
+        create_test_image(screenshot)
+        screenshots.append(screenshot)
+
+    copied = cli.copy_screenshots(
+        tuple(screenshots),
+        destination,
+        max_total_size_bytes=None,
+    )
+
+    captured = capsys.readouterr()
+    assert "Total size limit" not in captured.err
+    assert len(copied) == 3
+    for path in copied:
+        assert path.exists()
 
 
 # ==================== Filename Generation Tests ====================
@@ -545,7 +604,7 @@ def test_get_screenshots_uses_heapq_nlargest(tmp_path: Path, monkeypatch: pytest
 
     # Create 10 files
     for i in range(10):
-        (source / f"screenshot_{i}.png").touch()
+        create_test_image(source / f"screenshot_{i}.png")
 
     # Track heapq.nlargest calls
     original_nlargest = heapq.nlargest
@@ -574,7 +633,7 @@ def test_get_screenshots_caches_stat_calls(tmp_path: Path, monkeypatch: pytest.M
     files = []
     for i in range(10):
         file = source / f"screenshot_{i}.png"
-        file.touch()
+        create_test_image(file)
         files.append(file)
 
     # Track stat calls
@@ -595,10 +654,9 @@ def test_get_screenshots_caches_stat_calls(tmp_path: Path, monkeypatch: pytest.M
     # Get 5 screenshots
     cli.get_screenshots(source, count=5)
 
-    # Each file should be stat'd exactly once (not multiple times)
-    # We expect 10 stat calls (one per file in directory)
+    # Each file is stat'd once thanks to reusing stat results in validation
     assert len(stat_calls) == 10
-    # Verify no duplicate stat calls
+    # Verify each file is stat'd exactly once (not more)
     assert len(set(stat_calls)) == 10
 
 
@@ -609,7 +667,7 @@ def test_get_screenshots_count_exceeds_available(tmp_path: Path) -> None:
 
     # Create only 3 files
     for i in range(3):
-        (source / f"screenshot_{i}.png").touch()
+        create_test_image(source / f"screenshot_{i}.png")
 
     # Request 5 files (more than available) - should exit with error
     with pytest.raises(SystemExit):

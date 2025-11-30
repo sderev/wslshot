@@ -6,6 +6,7 @@ from uuid import UUID
 
 import pytest
 from click.testing import CliRunner
+from conftest import create_test_image
 from wslshot import cli
 
 
@@ -31,11 +32,11 @@ def test_format_screenshots_path_for_git_skips_external_paths(tmp_path: Path) ->
 
     inside = git_root / "assets" / "images" / "shot.png"
     inside.parent.mkdir(parents=True)
-    inside.touch()
+    create_test_image(inside)
 
     outside = tmp_path / "other" / "shot.png"
     outside.parent.mkdir()
-    outside.touch()
+    create_test_image(outside)
 
     result = cli.format_screenshots_path_for_git(
         (inside, outside),
@@ -75,7 +76,7 @@ def test_fetch_skips_staging_when_destination_outside_repo(
     repo_root.mkdir()
 
     screenshot = source / "screen.png"
-    screenshot.write_bytes(b"fake")
+    create_test_image(screenshot)
 
     config_file = fake_home / ".config" / "wslshot" / "config.json"
     config_file.write_text(
@@ -216,11 +217,11 @@ def test_format_screenshots_path_for_git_all_outside_repo(tmp_path: Path) -> Non
 
     outside1 = tmp_path / "other1" / "shot1.png"
     outside1.parent.mkdir()
-    outside1.touch()
+    create_test_image(outside1)
 
     outside2 = tmp_path / "other2" / "shot2.png"
     outside2.parent.mkdir()
-    outside2.touch()
+    create_test_image(outside2)
 
     result = cli.format_screenshots_path_for_git((outside1, outside2), git_root)
 
