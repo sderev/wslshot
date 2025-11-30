@@ -336,24 +336,7 @@ def test_get_destination_with_missing_config_file(fake_home, tmp_path, monkeypat
     config_dir.mkdir(parents=True, exist_ok=True)
     config_file = config_dir / "config.json"
 
-    # Create a default config that will be returned when config is missing
-    default_config = {
-        "default_source": "",
-        "default_destination": "",
-        "auto_stage_enabled": False,
-        "default_output_format": "markdown",
-    }
-
-    # Mock read_config to return default config when file is missing
-    def mock_read_config(path):
-        if not config_file.exists():
-            # Simulate what happens when config is created
-            config_file.write_text(json.dumps(default_config))
-        with open(config_file, "r") as f:
-            return json.load(f)
-
-    monkeypatch.setattr(cli, "read_config", mock_read_config)
-    monkeypatch.setattr(cli, "get_config_file_path", lambda: config_file)
+    assert not config_file.exists()
 
     # Mock git to return False
     monkeypatch.setattr(cli, "is_git_repo", lambda: False)
@@ -368,6 +351,9 @@ def test_get_destination_with_missing_config_file(fake_home, tmp_path, monkeypat
     assert result == Path.cwd()
     # Verify config file was created
     assert config_file.exists()
+    with config_file.open() as f:
+        config = json.load(f)
+    assert config.get("default_destination", "") == ""
 
 
 def test_get_destination_with_malformed_config_file(fake_home, tmp_path, monkeypatch):
@@ -376,29 +362,10 @@ def test_get_destination_with_malformed_config_file(fake_home, tmp_path, monkeyp
     config_file = fake_home / ".config" / "wslshot" / "config.json"
     config_file.write_text("{invalid json")
 
-    # Default config that should be used after handling malformed JSON
-    default_config = {
-        "default_source": "",
-        "default_destination": "",
-        "auto_stage_enabled": False,
-        "default_output_format": "markdown",
-    }
-
-    # Mock read_config to simulate handling JSONDecodeError
-    def mock_read_config(path):
-        try:
-            with open(path, "r") as f:
-                return json.load(f)
-        except json.JSONDecodeError:
-            # Simulate write_config behavior: recreate valid config
-            path.write_text(json.dumps(default_config))
-            return default_config
-
-    monkeypatch.setattr(cli, "read_config", mock_read_config)
-    monkeypatch.setattr(cli, "get_config_file_path", lambda: config_file)
-
     # Mock git to return False
     monkeypatch.setattr(cli, "is_git_repo", lambda: False)
+    monkeypatch.setattr(cli.click, "prompt", lambda *_, **kwargs: kwargs.get("default", ""))
+    monkeypatch.setattr(cli.click, "confirm", lambda *_, **kwargs: kwargs.get("default", False))
 
     # Set cwd
     cwd_dir = tmp_path / "current_dir"
