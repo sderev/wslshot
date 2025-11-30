@@ -12,7 +12,7 @@ Simply take a screenshot using the Windows Snipping tool (`win + shift + S`), an
 1. [Features](#features)
 1. [Installation](#installation)
     1. [Install with `pip`](#install-with-pip)
-    1. [Install with `pipx` (Recommended)](#install-with-pipx-recommended)
+    1. [Install with `uv`](#install-with-uv)
 1. [Windows Configuration](#windows-configuration)
     1. [For Windows 11 Users](#for-windows-11-users)
     1. [For Windows 10 Users](#for-windows-10-users)
@@ -38,7 +38,7 @@ Simply take a screenshot using the Windows Snipping tool (`win + shift + S`), an
 
 ## Installation
 
-Ensure you have Python 3.8 or later installed on your system.
+Ensure you have Python 3.10 or later installed on your system.
 
 ### Install with `pip`
 
@@ -46,10 +46,10 @@ Ensure you have Python 3.8 or later installed on your system.
 python3 -m pip install wslshot
 ```
 
-### Install with `pipx` (Recommended)
+### Install with `uv`
 
 ```bash
-pipx install wslshot
+uv tool install wslshot
 ```
 
 ## Windows Configuration
@@ -98,16 +98,20 @@ Remember to consult the documentation of your hypervisor for specific instructio
 Before using `wslshot`, you may want to configure it to suit your needs. You can do this using the `configure` command:
 
 ```bash
-wslshot configure --source /path/to/source --auto-stage-enabled True --output-style HTML
+wslshot configure [--source /path] [--destination /path] [--auto-stage-enabled True] [--output-style HTML] [--convert-to png]
 ```
 
 This command allows you to set various options:
 
 * **`--source` or `-s`**: This option lets you specify the default source directory where `wslshot` will look for screenshots.
 
+* **`--destination` or `-d`**: This option lets you specify the default destination directory where `wslshot` will copy screenshots.
+
 * **`--auto-stage-enabled`**: This option lets you control whether screenshots are automatically staged when copied to a git repository. By default, this option is set to `False`. If this option is set to `True`, any screenshot copied to a git repository will automatically be staged for commit.
 
 * **`--output-style`**: This option lets you set the default output style for the links to the screenshots that `wslshot` creates. The available styles are Markdown, HTML, and text. If you do not set this option, `wslshot` will output links in Markdown format by default.
+
+* **`--convert-to` or `-c`**: This option lets you set the default image conversion format. Supported formats: png, jpg, jpeg, webp, gif.
 
 Remember, these are just the default settings. You can override these settings on a per-operation basis by providing the corresponding options when running the `wslshot` command.
 
@@ -136,10 +140,26 @@ wslshot -n 3
 
 This will fetch the three most recent screenshots.
 
+**Convert screenshots to a different format**:
+
+```bash
+wslshot --convert-to png
+```
+
+This converts the screenshot(s) to the specified format. Supported formats: png, jpg, jpeg, webp, gif.
+
+**Allow symlinks (security risk)**:
+
+```bash
+wslshot --allow-symlinks
+```
+
+WARNING: Only use with trusted paths. By default, `wslshot` rejects symlinks for security.
+
 **These are all the possible options**:
 
 ```bash
-wslshot [--source /custom/source] [--destination /custom/destination] [--count 3] [--output-style HTML]
+wslshot [--source /custom/source] [--destination /custom/destination] [--count 3] [--output-style HTML] [--convert-to png] [--allow-symlinks]
 ```
 
 ## Specifying an Image Path Instead of a Directory
@@ -166,7 +186,7 @@ As with the standard usage of `wslshot`, the specified image will be copied to y
 
 ## Integration in Vim
 
-If `wslshot` is in your PATH (this is by default if you installed it with `pipx`), you can easily call it with a shebang command.
+If `wslshot` is in your PATH, you can easily call it with a shebang command.
 
 ```vim
 :.!wslshot
