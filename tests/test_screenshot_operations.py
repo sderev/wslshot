@@ -198,28 +198,53 @@ def test_get_screenshots_ignores_non_image_files(tmp_path: Path) -> None:
     assert set(result) == {png_file, jpg_file}
 
 
-def test_get_screenshots_handles_uppercase_extensions(tmp_path: Path) -> None:
-    """Test that get_screenshots does NOT find files with uppercase extensions (.PNG, .JPG)."""
+def test_get_screenshots_finds_uppercase_extensions(tmp_path: Path) -> None:
+    """Test that get_screenshots finds files with uppercase extensions (.PNG, .JPG)."""
     source = tmp_path / "source"
     source.mkdir()
 
-    # Create lowercase extension files
+    # Create mixed-case extension files
     lowercase_png = source / "lowercase.png"
-    lowercase_jpg = source / "lowercase.jpg"
-    create_test_image(lowercase_png)
-    create_test_image(lowercase_jpg)
-
-    # Create uppercase extension files (should be ignored based on the code)
-    uppercase_png = source / "UPPERCASE.PNG"
     uppercase_jpg = source / "UPPERCASE.JPG"
-    create_test_image(uppercase_png)
+    mixed_jpeg = source / "MiXeD.JpEg"
+
+    create_test_image(lowercase_png)
+    time.sleep(0.01)
     create_test_image(uppercase_jpg)
+    time.sleep(0.01)
+    create_test_image(mixed_jpeg)
 
-    # The code only globs for lowercase extensions, so uppercase files are ignored
-    result = cli.get_screenshots(source, count=2)
+    result = cli.get_screenshots(source, count=3)
 
-    assert len(result) == 2
-    assert set(result) == {lowercase_png, lowercase_jpg}
+    assert len(result) == 3
+    assert set(result) == {lowercase_png, uppercase_jpg, mixed_jpeg}
+
+
+def test_get_screenshots_case_insensitive_all_formats(tmp_path: Path) -> None:
+    """Test that all supported formats work with various case combinations."""
+    source = tmp_path / "source"
+    source.mkdir()
+
+    # Test all combinations
+    test_files = [
+        source / "image.png",
+        source / "image.PNG",
+        source / "image.jpg",
+        source / "image.JPG",
+        source / "image.jpeg",
+        source / "image.JPEG",
+        source / "image.gif",
+        source / "image.GIF",
+    ]
+
+    for file in test_files:
+        create_test_image(file)
+        time.sleep(0.01)
+
+    result = cli.get_screenshots(source, count=8)
+
+    assert len(result) == 8
+    assert set(result) == set(test_files)
 
 
 def test_get_screenshots_raises_error_when_no_screenshots_found(

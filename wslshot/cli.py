@@ -41,6 +41,9 @@ GIF_TRAILER = b"\x3B"
 # Valid output formats
 VALID_OUTPUT_FORMATS = ("markdown", "html", "text")
 
+# Supported image file extensions (lowercase)
+SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif')
+
 
 def atomic_write_json(path: Path, data: dict, mode: int = 0o600) -> None:
     """
@@ -493,7 +496,7 @@ def get_screenshots(source: str, count: int, max_file_size_bytes: int | None = N
         with os.scandir(source) as entries:
             for entry in entries:
                 # Check extension before stat (cheap filter)
-                if Path(entry.name).suffix in ('.png', '.jpg', '.jpeg', '.gif'):
+                if Path(entry.name).suffix.lower() in SUPPORTED_EXTENSIONS:
                     file_path = Path(entry.path)
                     try:
                         # Stat once and check if it's a regular file
