@@ -14,6 +14,7 @@ These tests verify the main CLI command behavior including:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -1136,11 +1137,11 @@ def test_fetch_fetches_most_recent_screenshot(
     config_file: Path,
 ) -> None:
     """Test fetches most recent screenshot."""
-    import time
-
+    base_time = 1700000000
     old_screenshot = create_screenshot(source_dir, "old.png")
-    time.sleep(0.01)  # Ensure different modification times
+    os.utime(old_screenshot, (base_time, base_time))
     recent_screenshot = create_screenshot(source_dir, "recent.png")
+    os.utime(recent_screenshot, (base_time + 2, base_time + 2))
 
     # Verify recent is actually newer
     assert recent_screenshot.stat().st_mtime > old_screenshot.stat().st_mtime
@@ -1165,11 +1166,11 @@ def test_fetch_fetches_n_most_recent_when_count_n(
     config_file: Path,
 ) -> None:
     """Test fetches N most recent when count=N."""
-    import time
-
+    base_time = 1700000000
     for i in range(5):
-        create_screenshot(source_dir, f"screenshot_{i}.png")
-        time.sleep(0.01)
+        screenshot = create_screenshot(source_dir, f"screenshot_{i}.png")
+        timestamp = base_time + (i * 2)
+        os.utime(screenshot, (timestamp, timestamp))
 
     result = runner.invoke(
         cli.wslshot,
