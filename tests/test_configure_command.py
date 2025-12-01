@@ -253,6 +253,34 @@ def test_configure_output_format_with_invalid_value(fake_home: Path) -> None:
     assert "markdown, html, text" in result.output
 
 
+@pytest.mark.parametrize(
+    ("user_input", "expected_suggestion"),
+    [
+        ("markdwon", "Did you mean: markdown?"),
+        ("HTM", "Did you mean: html?"),
+    ],
+)
+def test_configure_output_format_suggests_closest_match(
+    fake_home: Path,
+    user_input: str,
+    expected_suggestion: str,
+) -> None:
+    """Test configure prints suggestion for near-miss output styles."""
+    config_file = fake_home / ".config" / "wslshot" / "config.json"
+    create_default_config(config_file)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.wslshot,
+        ["configure", "--output-style", user_input],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 1
+    assert "Invalid output format" in result.output
+    assert expected_suggestion in result.output
+
+
 def test_configure_with_multiple_options(fake_home: Path, tmp_path: Path) -> None:
     """Test configure with multiple options at once."""
     source_dir = tmp_path / "screenshots"
