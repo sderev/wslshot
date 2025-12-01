@@ -873,6 +873,44 @@ def test_fetch_rejects_plain_text_in_config(
     assert "text" in result.output
 
 
+@pytest.mark.parametrize(
+    ("user_input", "expected_suggestion"),
+    [
+        ("htm", "Did you mean: html?"),
+        ("markdwon", "Did you mean: markdown?"),
+    ],
+)
+def test_fetch_suggests_closest_output_format(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+    user_input: str,
+    expected_suggestion: str,
+) -> None:
+    """Test fetch prints suggestion when output format is close to valid options."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-style",
+            user_input,
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 1
+    assert "Invalid output format" in result.output
+    assert expected_suggestion in result.output
+
+
 # ============================================================================
 # 5. Git Integration
 # ============================================================================
