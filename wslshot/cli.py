@@ -11,6 +11,7 @@ Features:
 - Customize the source directory using '--source'.
 - Customize the destination directory using '--destination'.
 - Choose your preferred output style (Markdown, HTML, or text) with the '--output-style' option.
+- Convert screenshots to png, jpg/jpeg, webp, or gif with the '--convert-to' option or a configured default.
 - Configure default settings with the 'configure' subcommand.
 
 For detailed usage instructions, use 'wslshot --help' or 'wslshot [command] --help'.

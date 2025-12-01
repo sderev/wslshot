@@ -34,6 +34,7 @@ Simply take a screenshot using the Windows Snipping tool (`win + shift + S`), an
   * Or automatically detect `/assets/images/` or other typical folders for this use case.
 * Fetch the most recent screenshot or specify a number of recent screenshots to fetch.
 * Control automatic staging of screenshots when copied to a git repository.
+* Convert screenshots to `png`, `jpg`/`jpeg`, `webp`, or `gif` during copy (flag or default).
 * Set a default output style (Markdown, HTML, text) and specify a custom style per operation.
 
 ## Installation
@@ -111,7 +112,7 @@ This command allows you to set various options:
 
 * **`--output-style`**: This option lets you set the default output style for the links to the screenshots that `wslshot` creates. The available styles are Markdown, HTML, and text. If you do not set this option, `wslshot` will output links in Markdown format by default.
 
-* **`--convert-to` or `-c`**: This option lets you set the default image conversion format. Supported formats: png, jpg, jpeg, webp, gif.
+* **`--convert-to` or `-c`**: Set the default image conversion format. Supported formats: png, jpg, jpeg, webp, gif. Conversion runs after copying; the converted file replaces the copied original. `jpeg` is treated as `jpg`. A CLI `--convert-to` flag overrides this default.
 
 Remember, these are just the default settings. You can override these settings on a per-operation basis by providing the corresponding options when running the `wslshot` command.
 
@@ -146,7 +147,7 @@ This will fetch the three most recent screenshots.
 wslshot --convert-to png
 ```
 
-This converts the screenshot(s) to the specified format. Supported formats: png, jpg, jpeg, webp, gif.
+This converts the screenshot(s) to the specified format. Supported formats: png, jpg, jpeg, webp, gif. If a default conversion is set in configuration, it runs when no flag is provided. Conversion happens after copying, and the converted file replaces the copied original. If auto-staging is enabled in a git repository, only the converted file is staged. Conversion is skipped only when the copied file already has the target extension; `.jpeg` files are rewritten to `.jpg`. Conversion applies both to the latest-screenshot workflow and when you pass a specific image path.
 
 **Allow symlinks (security risk)**:
 
