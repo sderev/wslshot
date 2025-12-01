@@ -79,6 +79,11 @@ def create_git_repo(path: Path) -> Path:
         cwd=path,
         check=True,
     )
+    subprocess.run(
+        ["git", "config", "commit.gpgsign", "false"],
+        cwd=path,
+        check=True,
+    )
     return path
 
 

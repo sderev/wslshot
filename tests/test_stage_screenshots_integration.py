@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from conftest import create_git_repo, create_test_image, get_staged_files, is_file_staged
@@ -143,3 +144,92 @@ def test_stage_partial_failure(tmp_path: Path, capsys) -> None:
 
     captured = capsys.readouterr()
     assert "Warning" in captured.err or "Failed" in captured.err
+
+
+# ====================  Git State and Performance Tests ====================
+
+
+def test_stage_already_staged_file(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    create_git_repo(repo)
+
+    screenshot = create_test_image(repo / "screenshot.png")
+
+    cli.stage_screenshots((screenshot.relative_to(repo),), repo)
+    assert is_file_staged(repo, screenshot)
+
+    cli.stage_screenshots((screenshot.relative_to(repo),), repo)
+    assert is_file_staged(repo, screenshot)
+
+
+def test_stage_modified_file(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    create_git_repo(repo)
+
+    screenshot = create_test_image(repo / "screenshot.png")
+
+    cli.stage_screenshots((screenshot.relative_to(repo),), repo)
+    subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo, check=True)
+
+    screenshot.write_bytes(b"modified content")
+
+    cli.stage_screenshots((screenshot.relative_to(repo),), repo)
+
+    assert is_file_staged(repo, screenshot)
+
+
+def test_stage_file_in_dirty_repo(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    create_git_repo(repo)
+
+    unrelated = repo / "unrelated.txt"
+    unrelated.write_text("unrelated content")
+
+    screenshot = create_test_image(repo / "screenshot.png")
+
+    cli.stage_screenshots((screenshot.relative_to(repo),), repo)
+
+    staged_files = set(get_staged_files(repo))
+    assert "screenshot.png" in staged_files
+    assert "unrelated.txt" not in staged_files
+
+
+def test_stage_does_not_auto_commit(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    create_git_repo(repo)
+
+    screenshot = create_test_image(repo / "screenshot.png")
+
+    cli.stage_screenshots((screenshot.relative_to(repo),), repo)
+
+    result = subprocess.run(
+        ["git", "log", "--oneline"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.stdout.strip() == ""
+
+
+def test_stage_many_files_performance(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    create_git_repo(repo)
+
+    screenshots = []
+    for i in range(50):
+        screenshot = create_test_image(repo / f"screenshot_{i}.png")
+        screenshots.append(screenshot)
+
+    cli.stage_screenshots(tuple(s.relative_to(repo) for s in screenshots), repo)
+
+    staged_files = set(get_staged_files(repo))
+    assert len(staged_files) == 50
+    for i in range(50):
+        assert f"screenshot_{i}.png" in staged_files
