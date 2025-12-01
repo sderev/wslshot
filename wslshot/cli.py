@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tempfile
 import uuid
+import warnings
 from pathlib import Path
 from stat import S_ISREG
 from typing import Any
@@ -33,8 +34,17 @@ import click
 from click_default_group import DefaultGroup
 from PIL import Image
 
+# Hard maximum limits (non-bypassable security ceilings)
+# Config values are clamped to these limits to prevent DoS attacks
+HARD_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024    # 50MB per file
+HARD_MAX_TOTAL_SIZE_BYTES = 200 * 1024 * 1024  # 200MB aggregate
+
+# Default limits (configurable but clamped to hard ceilings)
 MAX_IMAGE_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50MB
 MAX_TOTAL_IMAGE_SIZE_BYTES = 200 * 1024 * 1024  # 200MB
+# Pillow's decompression bomb warning threshold (89.478M pixels)
+# Images exceeding this are potential DoS vectors even if under file size limit
+MAX_IMAGE_PIXELS = 89_478_485
 PNG_TRAILER = b"\x00\x00\x00\x00IEND\xAE\x42\x60\x82"
 JPEG_TRAILER = b"\xFF\xD9"
 GIF_TRAILER = b"\x3B"
@@ -200,6 +210,10 @@ def validate_image_file(
 
     # Validate magic bytes using Pillow
     try:
+        # Configure Pillow to treat decompression bomb warnings as errors
+        # This prevents oversized images (89M+ pixels) from bypassing validation
+        warnings.filterwarnings('error', category=Image.DecompressionBombWarning)
+
         with Image.open(file_path) as img:
             # Read format BEFORE calling verify() - verify() invalidates the image object
             img_format = img.format
@@ -213,6 +227,15 @@ def validate_image_file(
 
             img.verify()  # Validates magic bytes and basic file structure
 
+        # Re-open image to check dimensions (verify() invalidates the object)
+        with Image.open(file_path) as img_check:
+            total_pixels = img_check.width * img_check.height
+            if total_pixels > MAX_IMAGE_PIXELS:
+                raise ValueError(
+                    f"Image dimensions too large: {img_check.width}x{img_check.height} "
+                    f"({total_pixels:,} pixels, maximum: {MAX_IMAGE_PIXELS:,})"
+                )
+
         # Reject files with trailing payloads after the format trailer
         file_bytes = file_path.read_bytes()
         if img_format == "PNG" and not file_bytes.endswith(PNG_TRAILER):
@@ -224,14 +247,14 @@ def validate_image_file(
 
         return True
 
-    except Image.DecompressionBombError as e:
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning) as e:
         # Decompression bombs are images with huge dimensions but small file size
         # (e.g., 1MB file that decompresses to 10GB). Pillow's default limit is
         # 89,478,485 pixels (~178MB at 24-bit color). We catch this separately
         # to provide a clear error message.
         raise ValueError(
             f"Image dimensions too large: {file_path.name} "
-            f"(suspected decompression bomb attack)"
+            f"(exceeds {MAX_IMAGE_PIXELS:,} pixel limit, suspected decompression bomb attack)"
         ) from e
     except (OSError, Image.UnidentifiedImageError) as e:
         raise ValueError(f"File is not a valid image: {file_path.name}") from e
@@ -241,8 +264,16 @@ def get_size_limits(config: dict[str, Any]) -> tuple[int, int | None]:
     """
     Resolve per-file and aggregate size limits from config (in MB).
 
-    A non-positive aggregate limit disables the total size cap to avoid
-    surprising failures for users with very large screenshot batches.
+    Config values are clamped to hard security ceilings (HARD_MAX_*) to prevent
+    DoS attacks. Users can set lower limits, but cannot exceed hard maximums.
+
+    A non-positive aggregate limit in config now applies the hard ceiling
+    (HARD_MAX_TOTAL_SIZE_BYTES) instead of disabling the check entirely.
+
+    Returns:
+        Tuple of (file_limit_bytes, total_limit_bytes)
+        - file_limit_bytes: Per-file limit (always enforced, max 50MB)
+        - total_limit_bytes: Aggregate limit (max 200MB, never None)
     """
     default_file_limit_mb = MAX_IMAGE_FILE_SIZE_BYTES // (1024 * 1024)
     default_total_limit_mb = MAX_TOTAL_IMAGE_SIZE_BYTES // (1024 * 1024)
@@ -250,16 +281,24 @@ def get_size_limits(config: dict[str, Any]) -> tuple[int, int | None]:
     file_limit_mb = config.get("max_file_size_mb", default_file_limit_mb)
     total_limit_mb = config.get("max_total_size_mb", default_total_limit_mb)
 
+    # Calculate requested file limit
     file_limit_bytes = MAX_IMAGE_FILE_SIZE_BYTES
     if isinstance(file_limit_mb, (int, float)) and file_limit_mb > 0:
         file_limit_bytes = int(file_limit_mb * 1024 * 1024)
 
+    # Enforce hard ceiling on per-file limit
+    file_limit_bytes = min(file_limit_bytes, HARD_MAX_FILE_SIZE_BYTES)
+
+    # Calculate aggregate limit
     total_limit_bytes: int | None = MAX_TOTAL_IMAGE_SIZE_BYTES
     if isinstance(total_limit_mb, (int, float)):
         if total_limit_mb > 0:
             total_limit_bytes = int(total_limit_mb * 1024 * 1024)
+            # Enforce hard ceiling on aggregate limit
+            total_limit_bytes = min(total_limit_bytes, HARD_MAX_TOTAL_SIZE_BYTES)
         else:
-            total_limit_bytes = None
+            # User disabled aggregate limit, but hard ceiling still applies
+            total_limit_bytes = HARD_MAX_TOTAL_SIZE_BYTES
 
     return file_limit_bytes, total_limit_bytes
 
@@ -937,11 +976,11 @@ def write_config(config_file_path: Path) -> None:
             None,
         ),
         "max_file_size_mb": (
-            "Enter the maximum allowed file size in MB (per file, e.g., 50)",
+            "Enter the maximum allowed file size in MB (per file, hard limit: 50MB ceiling)",
             MAX_IMAGE_FILE_SIZE_BYTES // (1024 * 1024),
         ),
         "max_total_size_mb": (
-            "Enter the maximum total size in MB for a batch (<=0 disables the limit)",
+            "Enter the maximum total size in MB for a batch (hard limit: 200MB ceiling; <=0 applies ceiling)",
             MAX_TOTAL_IMAGE_SIZE_BYTES // (1024 * 1024),
         ),
     }
