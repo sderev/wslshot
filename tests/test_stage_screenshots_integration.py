@@ -54,3 +54,92 @@ def test_stage_screenshots_in_subdirectory(tmp_path: Path) -> None:
 
     staged_files = set(get_staged_files(repo))
     assert staged_files == {f"screenshots/{path.name}" for path in nested_files}
+
+
+# ====================  Edge Case and Fallback Tests ====================
+
+
+def test_stage_empty_screenshot_list(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    create_git_repo(repo)
+
+    cli.stage_screenshots((), repo)
+
+    assert get_staged_files(repo) == []
+
+
+def test_stage_nonexistent_file(tmp_path: Path, capsys) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    create_git_repo(repo)
+
+    nonexistent = repo / "nonexistent.png"
+
+    cli.stage_screenshots((nonexistent.relative_to(repo),), repo)
+
+    captured = capsys.readouterr()
+    assert "Warning" in captured.err or "Failed" in captured.err
+    assert get_staged_files(repo) == []
+
+
+def test_stage_file_outside_repo(tmp_path: Path, capsys) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    create_git_repo(repo)
+
+    external_dir = tmp_path / "external"
+    external_dir.mkdir()
+    external_file = create_test_image(external_dir / "external.png")
+
+    cli.stage_screenshots((external_file,), repo)
+
+    captured = capsys.readouterr()
+    assert "Warning" in captured.err or "Failed" in captured.err
+    assert get_staged_files(repo) == []
+    assert is_file_staged(repo, external_file) is False
+
+
+def test_stage_screenshots_with_spaces_in_name(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    create_git_repo(repo)
+
+    screenshot = create_test_image(repo / "screen shot 1.png")
+
+    cli.stage_screenshots((screenshot.relative_to(repo),), repo)
+
+    assert is_file_staged(repo, screenshot)
+
+
+def test_stage_screenshots_with_unicode_name(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    create_git_repo(repo)
+
+    screenshot = create_test_image(repo / "screenshot_日本語.png")
+
+    cli.stage_screenshots((screenshot.relative_to(repo),), repo)
+
+    assert is_file_staged(repo, screenshot)
+
+
+def test_stage_partial_failure(tmp_path: Path, capsys) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    create_git_repo(repo)
+
+    valid1 = create_test_image(repo / "valid1.png")
+    valid2 = create_test_image(repo / "valid2.png")
+    invalid = Path("nonexistent.png")
+
+    cli.stage_screenshots(
+        (valid1.relative_to(repo), valid2.relative_to(repo), invalid), repo
+    )
+
+    staged_files = set(get_staged_files(repo))
+    assert "valid1.png" in staged_files
+    assert "valid2.png" in staged_files
+
+    captured = capsys.readouterr()
+    assert "Warning" in captured.err or "Failed" in captured.err
