@@ -37,6 +37,24 @@ Simply take a screenshot using the Windows Snipping tool (`win + shift + S`), an
 * Convert screenshots to `png`, `jpg`/`jpeg`, `webp`, or `gif` during copy (flag or default).
 * Set a default output style (Markdown, HTML, text) and specify a custom style per operation.
 
+## Security
+
+`wslshot` enforces strict file validation to prevent security vulnerabilities:
+
+### File Validation
+
+* **Magic byte verification**: Only PNG, JPEG, GIF formats accepted
+* **Trailer validation**: Files with trailing payloads rejected
+* **Decompression bomb protection**: Images exceeding 89M pixels rejected
+
+### Size Limits
+
+* **Per-file limit**: 50MB maximum (configurable below, not above)
+* **Aggregate limit**: 200MB maximum (configurable below, not above)
+
+These limits are non-bypassable security controls. Users can configure lower limits via `wslshot configure`, but cannot exceed the hard ceilings. This prevents DoS attacks via oversized images or configuration manipulation.
+Non-positive aggregate limits fall back to the 200MB ceiling rather than disabling the check.
+
 ## Installation
 
 Ensure you have Python 3.10 or later installed on your system.
