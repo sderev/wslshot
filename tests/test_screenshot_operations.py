@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import os
 import sys
-import time
 from pathlib import Path
 from uuid import UUID
 
@@ -79,13 +79,15 @@ def test_get_screenshots_finds_multiple_extensions(tmp_path: Path) -> None:
     gif_file = source / "image4.gif"
 
     # Create files with different timestamps
+    base_time = 1700000000
     create_test_image(png_file)
-    time.sleep(0.01)
+    os.utime(png_file, (base_time, base_time))
     create_test_image(jpg_file)
-    time.sleep(0.01)
+    os.utime(jpg_file, (base_time + 2, base_time + 2))
     create_test_image(jpeg_file)
-    time.sleep(0.01)
+    os.utime(jpeg_file, (base_time + 4, base_time + 4))
     create_test_image(gif_file)
+    os.utime(gif_file, (base_time + 6, base_time + 6))
 
     result = cli.get_screenshots(source, count=4)
 
@@ -103,11 +105,13 @@ def test_get_screenshots_sorts_by_modification_time(tmp_path: Path) -> None:
     middle = source / "middle.png"
     newest = source / "newest.png"
 
+    base_time = 1700000000
     create_test_image(oldest)
-    time.sleep(0.01)
+    os.utime(oldest, (base_time, base_time))
     create_test_image(middle)
-    time.sleep(0.01)
+    os.utime(middle, (base_time + 2, base_time + 2))
     create_test_image(newest)
+    os.utime(newest, (base_time + 4, base_time + 4))
 
     result = cli.get_screenshots(source, count=3)
 
@@ -122,10 +126,12 @@ def test_get_screenshots_returns_exactly_count_files(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
 
+    base_time = 1700000000
     for i in range(10):
         screenshot = source / f"screenshot_{i}.png"
         create_test_image(screenshot)
-        time.sleep(0.01)
+        timestamp = base_time + (i * 2)
+        os.utime(screenshot, (timestamp, timestamp))
 
     result = cli.get_screenshots(source, count=5)
 
@@ -140,9 +146,11 @@ def test_get_screenshots_with_count_one_returns_most_recent(tmp_path: Path) -> N
     older = source / "older.png"
     newer = source / "newer.png"
 
+    base_time = 1700000000
     create_test_image(older)
-    time.sleep(0.01)
+    os.utime(older, (base_time, base_time))
     create_test_image(newer)
+    os.utime(newer, (base_time + 2, base_time + 2))
 
     result = cli.get_screenshots(source, count=1)
 
@@ -157,12 +165,14 @@ def test_get_screenshots_with_count_three_returns_three_most_recent_in_order(
     source = tmp_path / "source"
     source.mkdir()
 
+    base_time = 1700000000
     files = []
     for i in range(5):
         screenshot = source / f"screenshot_{i}.png"
         create_test_image(screenshot)
+        timestamp = base_time + (i * 2)
+        os.utime(screenshot, (timestamp, timestamp))
         files.append(screenshot)
-        time.sleep(0.01)
 
     result = cli.get_screenshots(source, count=3)
 
@@ -208,11 +218,13 @@ def test_get_screenshots_finds_uppercase_extensions(tmp_path: Path) -> None:
     uppercase_jpg = source / "UPPERCASE.JPG"
     mixed_jpeg = source / "MiXeD.JpEg"
 
+    base_time = 1700000000
     create_test_image(lowercase_png)
-    time.sleep(0.01)
+    os.utime(lowercase_png, (base_time, base_time))
     create_test_image(uppercase_jpg)
-    time.sleep(0.01)
+    os.utime(uppercase_jpg, (base_time + 2, base_time + 2))
     create_test_image(mixed_jpeg)
+    os.utime(mixed_jpeg, (base_time + 4, base_time + 4))
 
     result = cli.get_screenshots(source, count=3)
 
@@ -237,9 +249,11 @@ def test_get_screenshots_case_insensitive_all_formats(tmp_path: Path) -> None:
         source / "image.GIF",
     ]
 
-    for file in test_files:
+    base_time = 1700000000
+    for index, file in enumerate(test_files):
         create_test_image(file)
-        time.sleep(0.01)
+        timestamp = base_time + (index * 2)
+        os.utime(file, (timestamp, timestamp))
 
     result = cli.get_screenshots(source, count=8)
 
