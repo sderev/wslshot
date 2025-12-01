@@ -19,12 +19,13 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "scriv[toml]>=1.5.0",
 ]
 
 [project.urls]
 Documentation = "https://github.com/sderev/wslshot"
 Issues = "https://github.com/sderev/wslshot/issues"
-Changelog = "https://github.com/sderev/wslshot/releases"
+Changelog = "https://github.com/sderev/wslshot/blob/main/CHANGELOG.md"
 
 [project.scripts]
 wslshot = "wslshot.cli:wslshot"
@@ -35,3 +36,20 @@ packages = ["wslshot"]
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
+
+[tool.scriv]
+version = "literal: pyproject.toml: project.version"
+format = "md"
+md_header_level = 2
+output_file = "CHANGELOG.md"
+fragment_directory = "changelog.d"
+new_fragment_template = "file: changelog.d/templates/fragment.md.j2"
+categories = [
+    "Added",
+    "Changed",
+    "Deprecated",
+    "Removed",
+    "Fixed",
+    "Security",
+]
+entry_title_template = "{{ version }} - {{ date.strftime('%Y-%m-%d') }}"

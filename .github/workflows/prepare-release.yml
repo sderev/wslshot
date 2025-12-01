@@ -1,0 +1,60 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to prepare (e.g., 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    name: Collect changelog and prepare release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Collect changelog fragments
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if uv run --extra dev scriv collect --version "$VERSION"; then
+            echo "Changelog fragments collected"
+          else
+            status=$?
+            if [ "$status" -eq 2 ]; then
+              echo "::notice::No changelog fragments to collect"
+              exit 0
+            fi
+            exit "$status"
+          fi
+
+      - name: Commit and push
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if git diff --quiet; then
+            echo "::notice::No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md changelog.d/
+          git commit -m "Collect changelog for v${VERSION}"
+          git push
