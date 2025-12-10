@@ -6,6 +6,7 @@ Tests decompression bomb protection and non-bypassable size limit enforcement.
 
 import pytest
 from PIL import Image
+
 from wslshot.cli import (
     HARD_MAX_FILE_SIZE_BYTES,
     HARD_MAX_TOTAL_SIZE_BYTES,

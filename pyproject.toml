@@ -33,6 +33,12 @@ wslshot = "wslshot.cli:wslshot"
 [tool.setuptools]
 packages = ["wslshot"]
 
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+extend-select = ["I001"]
+
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]

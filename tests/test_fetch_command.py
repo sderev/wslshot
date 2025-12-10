@@ -22,6 +22,7 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 from conftest import create_test_image
+
 from wslshot import cli
 
 # ============================================================================
