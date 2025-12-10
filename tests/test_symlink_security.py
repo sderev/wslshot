@@ -6,14 +6,12 @@ to prevent attackers from exfiltrating sensitive files (SSH keys, credentials).
 """
 
 import os
-import tempfile
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
-
-from wslshot.cli import resolve_path_safely, fetch, configure
 from conftest import create_test_image
+from wslshot.cli import configure, fetch, resolve_path_safely
 
 
 class TestResolvePathSafely:
@@ -444,7 +442,13 @@ class TestAllowSymlinksFlag:
         # Run fetch with --allow-symlinks
         result = runner.invoke(
             fetch,
-            ["--source", str(symlink_source), "--destination", str(destination), "--allow-symlinks"],
+            [
+                "--source",
+                str(symlink_source),
+                "--destination",
+                str(destination),
+                "--allow-symlinks",
+            ],
         )
 
         # Should succeed (exit code 0)
@@ -472,7 +476,13 @@ class TestAllowSymlinksFlag:
         # Run fetch with --allow-symlinks
         result = runner.invoke(
             fetch,
-            ["--source", str(source), "--destination", str(symlink_destination), "--allow-symlinks"],
+            [
+                "--source",
+                str(source),
+                "--destination",
+                str(symlink_destination),
+                "--allow-symlinks",
+            ],
         )
 
         # Should succeed

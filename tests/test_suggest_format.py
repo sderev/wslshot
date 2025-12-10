@@ -7,7 +7,6 @@ from __future__ import annotations
 import pytest
 from wslshot import cli
 
-
 VALID_FORMATS = list(cli.VALID_OUTPUT_FORMATS)
 
 

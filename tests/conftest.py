@@ -46,9 +46,9 @@ def create_test_image(path: Path, format: str = "PNG") -> Path:
     """
     # Determine format from extension if not explicitly provided
     suffix = path.suffix.lower()
-    if suffix in ('.jpg', '.jpeg'):
+    if suffix in (".jpg", ".jpeg"):
         format = "JPEG"
-    elif suffix == '.gif':
+    elif suffix == ".gif":
         format = "GIF"
     else:
         format = "PNG"
@@ -110,7 +110,7 @@ def get_staged_files(repo_path: Path) -> list[str]:
             # Remove quotes and decode escape sequences
             line = line[1:-1]
             # Decode octal escape sequences (\346 -> byte)
-            line = line.encode('utf-8').decode('unicode_escape').encode('latin1').decode('utf-8')
+            line = line.encode("utf-8").decode("unicode_escape").encode("latin1").decode("utf-8")
         files.append(line)
     return files
 
@@ -120,9 +120,7 @@ def is_file_staged(repo_path: Path, file_path: Path) -> bool:
     staged = get_staged_files(repo_path)
     # Handle both absolute and relative paths
     try:
-        relative = (
-            file_path.relative_to(repo_path) if file_path.is_absolute() else file_path
-        )
+        relative = file_path.relative_to(repo_path) if file_path.is_absolute() else file_path
     except ValueError:
         return False
     return str(relative) in staged

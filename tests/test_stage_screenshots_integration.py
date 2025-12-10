@@ -134,9 +134,7 @@ def test_stage_partial_failure(tmp_path: Path, capsys) -> None:
     valid2 = create_test_image(repo / "valid2.png")
     invalid = Path("nonexistent.png")
 
-    cli.stage_screenshots(
-        (valid1.relative_to(repo), valid2.relative_to(repo), invalid), repo
-    )
+    cli.stage_screenshots((valid1.relative_to(repo), valid2.relative_to(repo), invalid), repo)
 
     staged_files = set(get_staged_files(repo))
     assert "valid1.png" in staged_files

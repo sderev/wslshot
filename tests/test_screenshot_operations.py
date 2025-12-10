@@ -6,8 +6,8 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from wslshot import cli
 from conftest import create_test_image
+from wslshot import cli
 
 # ==================== Finding Screenshots Tests ====================
 
@@ -634,7 +634,9 @@ def test_generate_screenshot_name_lowercases_extension(monkeypatch: pytest.Monke
 # ==================== Heapq Optimization Tests ====================
 
 
-def test_get_screenshots_uses_heapq_nlargest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_screenshots_uses_heapq_nlargest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test that get_screenshots uses heapq.nlargest instead of list.sort for efficiency."""
     import heapq
 
