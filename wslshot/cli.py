@@ -36,7 +36,7 @@ from PIL import Image
 
 # Hard maximum limits (non-bypassable security ceilings)
 # Config values are clamped to these limits to prevent DoS attacks
-HARD_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024    # 50MB per file
+HARD_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50MB per file
 HARD_MAX_TOTAL_SIZE_BYTES = 200 * 1024 * 1024  # 200MB aggregate
 
 # Default limits (configurable but clamped to hard ceilings)
@@ -45,15 +45,15 @@ MAX_TOTAL_IMAGE_SIZE_BYTES = 200 * 1024 * 1024  # 200MB
 # Pillow's decompression bomb warning threshold (89.478M pixels)
 # Images exceeding this are potential DoS vectors even if under file size limit
 MAX_IMAGE_PIXELS = 89_478_485
-PNG_TRAILER = b"\x00\x00\x00\x00IEND\xAE\x42\x60\x82"
-JPEG_TRAILER = b"\xFF\xD9"
-GIF_TRAILER = b"\x3B"
+PNG_TRAILER = b"\x00\x00\x00\x00IEND\xae\x42\x60\x82"
+JPEG_TRAILER = b"\xff\xd9"
+GIF_TRAILER = b"\x3b"
 
 # Valid output formats
 VALID_OUTPUT_FORMATS = ("markdown", "html", "text")
 
 # Supported image file extensions (lowercase)
-SUPPORTED_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.gif')
+SUPPORTED_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif")
 
 
 def atomic_write_json(path: Path, data: dict, mode: int = 0o600) -> None:
@@ -79,8 +79,8 @@ def atomic_write_json(path: Path, data: dict, mode: int = 0o600) -> None:
         # Write to temp file
         with os.fdopen(temp_fd, "w", encoding="UTF-8") as f:
             json.dump(data, f, indent=4)
-            f.flush()              # Flush Python buffers to OS
-            os.fsync(f.fileno())   # Force OS to write to physical disk
+            f.flush()  # Flush Python buffers to OS
+            os.fsync(f.fileno())  # Force OS to write to physical disk
 
         # Set permissions on temp file
         os.chmod(temp_path, mode)
@@ -310,7 +310,7 @@ def validate_image_file(
     try:
         # Configure Pillow to treat decompression bomb warnings as errors
         # This prevents oversized images (89M+ pixels) from bypassing validation
-        warnings.filterwarnings('error', category=Image.DecompressionBombWarning)
+        warnings.filterwarnings("error", category=Image.DecompressionBombWarning)
 
         with Image.open(file_path) as img:
             # Read format BEFORE calling verify() - verify() invalidates the image object
@@ -319,8 +319,7 @@ def validate_image_file(
             # Check format is supported (PNG, JPEG, GIF)
             if img_format not in ("PNG", "JPEG", "GIF"):
                 raise ValueError(
-                    f"Unsupported image format: {img_format} "
-                    f"(supported: PNG, JPEG, GIF)"
+                    f"Unsupported image format: {img_format} (supported: PNG, JPEG, GIF)"
                 )
 
             img.verify()  # Validates magic bytes and basic file structure
@@ -631,7 +630,9 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
         print_formatted_path(output_format, copied_screenshots, relative_to_repo=False)
 
 
-def get_screenshots(source: str, count: int, max_file_size_bytes: int | None = None) -> tuple[Path, ...]:
+def get_screenshots(
+    source: str, count: int, max_file_size_bytes: int | None = None
+) -> tuple[Path, ...]:
     """
     Get the most recent screenshot(s) from the source directory.
 
@@ -1280,7 +1281,9 @@ def set_default_destination(destination_str: str) -> None:
         sys.exit(1)
     except FileNotFoundError as error:
         sanitized_msg = format_path_error(error)
-        click.echo(click.style(f"Invalid destination directory: {sanitized_msg}", fg="red"), err=True)
+        click.echo(
+            click.style(f"Invalid destination directory: {sanitized_msg}", fg="red"), err=True
+        )
         sys.exit(1)
 
     config_file_path = get_config_file_path()

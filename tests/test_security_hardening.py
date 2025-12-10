@@ -4,12 +4,8 @@ Tests for security hardening features (PERSO-270).
 Tests decompression bomb protection and non-bypassable size limit enforcement.
 """
 
-import io
-from pathlib import Path
-
 import pytest
 from PIL import Image
-
 from wslshot.cli import (
     HARD_MAX_FILE_SIZE_BYTES,
     HARD_MAX_TOTAL_SIZE_BYTES,

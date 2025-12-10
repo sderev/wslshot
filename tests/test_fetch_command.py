@@ -21,8 +21,8 @@ from unittest.mock import MagicMock
 
 import pytest
 from click.testing import CliRunner
-from wslshot import cli
 from conftest import create_test_image
+from wslshot import cli
 
 # ============================================================================
 # Fixtures and Helpers

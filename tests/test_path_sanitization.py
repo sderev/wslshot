@@ -12,10 +12,9 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from PIL import Image
-
 from wslshot.cli import (
-    copy_screenshots,
     convert_image_format,
+    copy_screenshots,
     fetch,
     format_path_error,
     get_screenshots,
@@ -464,7 +463,10 @@ class TestRegressionPathSanitization:
         for node in ast.walk(ast_tree):
             if isinstance(node, ast.Call):
                 func = node.func
-                if isinstance(func, ast.Name) and func.id in {"sanitize_path_for_error", "format_path_error"}:
+                if isinstance(func, ast.Name) and func.id in {
+                    "sanitize_path_for_error",
+                    "format_path_error",
+                }:
                     call_count += 1
 
         assert call_count >= 10, f"Expected at least 10 sanitization calls, found {call_count}"

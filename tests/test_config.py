@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from wslshot import cli
 
 
@@ -19,6 +18,7 @@ class TestGetConfigFilePath:
         self, fake_home: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test that config file is created at ~/.config/wslshot/config.json."""
+
         # Mock write_config to avoid interactive prompts
         def mock_write_config(path: Path) -> None:
             with open(path, "w", encoding="UTF-8") as f:
@@ -52,9 +52,7 @@ class TestGetConfigFilePath:
         assert config_path.parent.exists()
         assert config_path.parent.is_dir()
 
-    def test_get_config_file_path_creates_file_if_not_exists(
-        self, fake_home: Path
-    ) -> None:
+    def test_get_config_file_path_creates_file_if_not_exists(self, fake_home: Path) -> None:
         """Test that config file is created if it doesn't exist."""
         config_path = cli.get_config_file_path()
 
@@ -73,6 +71,7 @@ class TestGetConfigFilePath:
         self, fake_home: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test that config file is created with 0o600 permissions."""
+
         # Mock write_config to avoid interactive prompts
         def mock_write_config(path: Path) -> None:
             with open(path, "w", encoding="UTF-8") as f:
@@ -194,7 +193,9 @@ class TestWriteConfig:
             value = inputs.get(field, "")
             return str(value) if value is not None else ""
 
-        monkeypatch.setattr(cli, "get_validated_directory_input", mock_get_validated_directory_input)
+        monkeypatch.setattr(
+            cli, "get_validated_directory_input", mock_get_validated_directory_input
+        )
         monkeypatch.setattr(cli, "get_config_boolean_input", mock_get_config_boolean_input)
         monkeypatch.setattr(cli, "get_validated_input", mock_get_validated_input)
         monkeypatch.setattr(cli, "get_config_input", mock_get_config_input)
@@ -265,7 +266,9 @@ class TestWriteConfig:
             value = current_config.get(field, "")
             return str(value) if value is not None else ""
 
-        monkeypatch.setattr(cli, "get_validated_directory_input", mock_get_validated_directory_input)
+        monkeypatch.setattr(
+            cli, "get_validated_directory_input", mock_get_validated_directory_input
+        )
         monkeypatch.setattr(cli, "get_config_boolean_input", mock_get_config_boolean_input)
         monkeypatch.setattr(cli, "get_validated_input", mock_get_validated_input)
         monkeypatch.setattr(cli, "get_config_input", mock_get_config_input)
@@ -354,7 +357,9 @@ class TestSetDefaultSource:
         error_messages: list[str] = []
         monkeypatch.setattr(
             "click.echo",
-            lambda msg=None, **kwargs: error_messages.append(msg) if msg and kwargs.get("err") else None,
+            lambda msg=None, **kwargs: error_messages.append(msg)
+            if msg and kwargs.get("err")
+            else None,
         )
 
         invalid_dir = tmp_path / "nonexistent"
@@ -439,7 +444,9 @@ class TestSetDefaultDestination:
         error_messages: list[str] = []
         monkeypatch.setattr(
             "click.echo",
-            lambda msg=None, **kwargs: error_messages.append(msg) if msg and kwargs.get("err") else None,
+            lambda msg=None, **kwargs: error_messages.append(msg)
+            if msg and kwargs.get("err")
+            else None,
         )
 
         invalid_dir = tmp_path / "nonexistent"
@@ -576,7 +583,9 @@ class TestSetDefaultOutputFormat:
         error_messages: list[str] = []
         monkeypatch.setattr(
             "click.echo",
-            lambda msg=None, **kwargs: error_messages.append(msg) if msg and kwargs.get("err") else None,
+            lambda msg=None, **kwargs: error_messages.append(msg)
+            if msg and kwargs.get("err")
+            else None,
         )
 
         with pytest.raises(SystemExit):
@@ -730,12 +739,12 @@ class TestGetValidatedDirectoryInput:
         monkeypatch.setattr(cli, "get_config_input", mock_get_config_input)
         monkeypatch.setattr(
             "click.echo",
-            lambda msg=None, **kwargs: error_messages.append(msg) if msg and kwargs.get("err") else None,
+            lambda msg=None, **kwargs: error_messages.append(msg)
+            if msg and kwargs.get("err")
+            else None,
         )
 
-        result = cli.get_validated_directory_input(
-            "test_field", "Enter directory", {}, ""
-        )
+        result = cli.get_validated_directory_input("test_field", "Enter directory", {}, "")
 
         assert result == str(valid_dir.resolve())
         assert call_count[0] == 2

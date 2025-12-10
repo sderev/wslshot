@@ -16,7 +16,6 @@ from pathlib import Path
 
 import pytest
 from PIL import Image
-
 from wslshot.cli import validate_image_file
 
 
@@ -108,7 +107,7 @@ class TestValidateImageFile:
         """File with corrupted PNG header should be rejected."""
         corrupted = tmp_path / "corrupted.png"
         # Invalid PNG magic bytes
-        corrupted.write_bytes(b"\x89PNG\x0D\x0A\x1A\xFF" + b"\x00" * 100)
+        corrupted.write_bytes(b"\x89PNG\x0d\x0a\x1a\xff" + b"\x00" * 100)
 
         with pytest.raises(ValueError, match="not a valid image"):
             validate_image_file(corrupted)
@@ -140,11 +139,14 @@ class TestValidateImageFile:
         img.save(img_path, "PNG")
 
         file_size = img_path.stat().st_size
-        assert validate_image_file(
-            img_path,
-            max_size_bytes=file_size + 1,
-            file_size=file_size,
-        ) is True
+        assert (
+            validate_image_file(
+                img_path,
+                max_size_bytes=file_size + 1,
+                file_size=file_size,
+            )
+            is True
+        )
 
     def test_file_over_limit_rejected(self, tmp_path: Path) -> None:
         """File over custom limit should be rejected."""
