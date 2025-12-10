@@ -160,6 +160,104 @@ def resolve_path_safely(path_str: str, check_symlink: bool = True) -> Path:
     return resolved
 
 
+def sanitize_path_for_error(path: str | Path, *, show_basename: bool = True) -> str:
+    """
+    Sanitize filesystem paths in error messages (CWE-209 prevention).
+
+    This function prevents CWE-209 (Information Exposure Through Error Message) by
+    hiding sensitive path information that could reveal usernames, directory structure,
+    or system configuration to attackers.
+
+    Args:
+        path: Path to sanitize (string or Path object)
+        show_basename: If True, show `<...>/filename`; if False, show `<path>`
+
+    Returns:
+        Sanitized path string safe for error messages
+
+    Examples:
+        >>> sanitize_path_for_error("/home/alice/.ssh/key.txt")
+        '<...>/key.txt'
+
+        >>> sanitize_path_for_error("/home/alice/.ssh/key.txt", show_basename=False)
+        '<path>'
+
+    Security Context:
+        Without sanitization, error messages like "Source directory /home/alice_admin/.secret
+        does not exist" reveal usernames and directory structure to attackers probing the system.
+    """
+    if isinstance(path, Path):
+        path = str(path)
+
+    if not show_basename:
+        return "<path>"
+
+    path_str = str(path)
+    if not path_str:
+        return "<path>"
+
+    # Normalize both POSIX and Windows separators to safely extract basename
+    normalized = path_str.replace("\\", "/").rstrip("/")
+    basename = normalized.split("/")[-1] if normalized else ""
+
+    if not basename or basename == ".":
+        return "<path>"
+
+    return f"<...>/{basename}"
+
+
+def format_path_error(error: Exception, *, show_basename: bool = True) -> str:
+    """
+    Format path-related errors with sanitized paths for safe display.
+
+    Keeps user-facing context like "No such file or directory" while ensuring
+    filesystem paths are redacted to prevent CWE-209 information disclosure.
+    """
+    if isinstance(error, FileNotFoundError):
+        filename = error.filename or error.filename2
+        reason = error.strerror or "Path not found"
+        if filename:
+            sanitized = sanitize_path_for_error(filename, show_basename=show_basename)
+            return f"{reason}: {sanitized}"
+        return reason
+
+    message = str(error)
+    if ": " in message:
+        prefix, path_part = message.split(": ", 1)
+        # Only sanitize when the suffix looks like a filesystem path
+        if any(sep in path_part for sep in ("/", "\\")):
+            sanitized = sanitize_path_for_error(path_part, show_basename=show_basename)
+            return f"{prefix}: {sanitized}"
+
+    return message
+
+
+def sanitize_error_message(
+    message: str,
+    paths: tuple[str | Path, ...],
+    *,
+    show_basename: bool = True,
+) -> str:
+    """
+    Replace occurrences of filesystem paths inside an error message with sanitized versions.
+
+    Args:
+        message: Error message potentially containing sensitive paths.
+        paths: Tuple of paths to sanitize if present in the message.
+        show_basename: Whether to reveal the basename when sanitizing.
+
+    Returns:
+        Message with sensitive paths redacted.
+    """
+    sanitized_message = message
+    for path in paths:
+        sanitized_message = sanitized_message.replace(
+            str(path),
+            sanitize_path_for_error(path, show_basename=show_basename),
+        )
+    return sanitized_message
+
+
 def validate_image_file(
     file_path: Path,
     *,
@@ -389,7 +487,8 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
     try:
         source = resolve_path_safely(source, check_symlink=not allow_symlinks)
     except ValueError as error:
-        click.echo(f"{click.style('Security Error:', fg='red')} {error}", err=True)
+        sanitized_error = format_path_error(error)
+        click.echo(f"{click.style('Security Error:', fg='red')} {sanitized_error}", err=True)
         if allow_symlinks:
             click.echo("Symlink check was disabled with --allow-symlinks", err=True)
         else:
@@ -397,7 +496,7 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
         sys.exit(1)
     except FileNotFoundError:
         click.echo(
-            f"{click.style(f'Source directory {source} does not exist.', fg='red')}",
+            f"{click.style(f'Source directory {sanitize_path_for_error(source)} does not exist.', fg='red')}",
             err=True,
         )
         sys.exit(1)
@@ -409,7 +508,8 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
     try:
         destination = resolve_path_safely(destination, check_symlink=not allow_symlinks)
     except ValueError as error:
-        click.echo(f"{click.style('Security Error:', fg='red')} {error}", err=True)
+        sanitized_error = format_path_error(error)
+        click.echo(f"{click.style('Security Error:', fg='red')} {sanitized_error}", err=True)
         if allow_symlinks:
             click.echo("Symlink check was disabled with --allow-symlinks", err=True)
         else:
@@ -417,7 +517,7 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
         sys.exit(1)
     except FileNotFoundError:
         click.echo(
-            f"{click.style(f'Destination directory {destination} does not exist.', fg='red')}",
+            f"{click.style(f'Destination directory {sanitize_path_for_error(destination)} does not exist.', fg='red')}",
             err=True,
         )
         sys.exit(1)
@@ -447,11 +547,12 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
             # SECURITY: Validate file content, not just extension (PERSO-193 - CWE-434)
             validate_image_file(image_path_resolved, max_size_bytes=max_file_size_bytes)
         except ValueError as error:
+            sanitized_error = format_path_error(error)
             click.echo(
-                f"{click.style('Security Error:', fg='red')} {error}",
+                f"{click.style('Security Error:', fg='red')} {sanitized_error}",
                 err=True,
             )
-            click.echo(f"Source file: {image_path}", err=True)
+            click.echo(f"Source file: {sanitize_path_for_error(image_path)}", err=True)
 
             # Only suggest --allow-symlinks for symlink-related errors
             # Content validation errors should not suggest disabling symlink checks
@@ -460,25 +561,37 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
                 click.echo("If you trust this path, use: --allow-symlinks", err=True)
             sys.exit(1)
         except FileNotFoundError as error:
-            click.echo(f"{click.style('Error:', fg='red')} Image file not found: {error}", err=True)
+            sanitized_error = format_path_error(error)
+            click.echo(
+                f"{click.style('Error:', fg='red')} Image file not found: {sanitized_error}",
+                err=True,
+            )
             sys.exit(1)
 
         image_path = (image_path_resolved,)  # For compatibility with copy_screenshots()
-        copied_screenshots = copy_screenshots(
-            image_path,
-            destination,
-            max_file_size_bytes=max_file_size_bytes,
-            max_total_size_bytes=max_total_size_bytes,
-        )
+        try:
+            copied_screenshots = copy_screenshots(
+                image_path,
+                destination,
+                max_file_size_bytes=max_file_size_bytes,
+                max_total_size_bytes=max_total_size_bytes,
+            )
+        except ValueError as error:
+            click.echo(f"{click.style('Error:', fg='red')} {error}", err=True)
+            sys.exit(1)
     else:
         # Copy the screenshot(s) to the destination directory.
         source_screenshots = get_screenshots(source, count, max_file_size_bytes=max_file_size_bytes)
-        copied_screenshots = copy_screenshots(
-            source_screenshots,
-            destination,
-            max_file_size_bytes=max_file_size_bytes,
-            max_total_size_bytes=max_total_size_bytes,
-        )
+        try:
+            copied_screenshots = copy_screenshots(
+                source_screenshots,
+                destination,
+                max_file_size_bytes=max_file_size_bytes,
+                max_total_size_bytes=max_total_size_bytes,
+            )
+        except ValueError as error:
+            click.echo(f"{click.style('Error:', fg='red')} {error}", err=True)
+            sys.exit(1)
 
     # Convert images if --convert-to option is provided
     if convert_to:
@@ -488,11 +601,13 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
                 converted_path = convert_image_format(screenshot, convert_to)
                 converted_screenshots += (converted_path,)
             except ValueError as error:
+                sanitized_screenshot = sanitize_path_for_error(screenshot)
+                sanitized_error = sanitize_error_message(str(error), (screenshot,))
                 click.echo(
-                    f"{click.style('Failed to convert image:', fg='red')} {screenshot}",
+                    f"{click.style('Failed to convert image:', fg='red')} {sanitized_screenshot}",
                     err=True,
                 )
-                click.echo(f"{error}", err=True)
+                click.echo(f"{sanitized_error}", err=True)
                 sys.exit(1)
         copied_screenshots = converted_screenshots
 
@@ -577,7 +692,16 @@ def get_screenshots(source: str, count: int, max_file_size_bytes: int | None = N
             err=True,
         )
         click.echo(f"{error}", err=True)
-        click.echo(f"Source directory: {source}\n", err=True)
+        click.echo(f"Source directory: {sanitize_path_for_error(source)}\n", err=True)
+        sys.exit(1)
+    except OSError as error:
+        sanitized_error = format_path_error(error)
+        click.echo(
+            f"{click.style('An error occurred while fetching the screenshot(s).', fg='red')}",
+            err=True,
+        )
+        click.echo(f"{sanitized_error}", err=True)
+        click.echo(f"Source directory: {sanitize_path_for_error(source)}\n", err=True)
         sys.exit(1)
 
     return tuple(screenshots)
@@ -614,8 +738,9 @@ def copy_screenshots(
         try:
             stat_result = screenshot.stat()
         except OSError as e:
+            sanitized_error = sanitize_error_message(str(e), (screenshot,))
             click.echo(
-                f"{click.style('Warning:', fg='yellow')} Skipping unreadable file: {screenshot} ({e})",
+                f"{click.style('Warning:', fg='yellow')} Skipping unreadable file: {sanitize_path_for_error(screenshot)} ({sanitized_error})",
                 err=True,
             )
             continue
@@ -650,7 +775,14 @@ def copy_screenshots(
 
         new_screenshot_name = generate_screenshot_name(screenshot)
         new_screenshot_path = Path(destination) / new_screenshot_name
-        shutil.copy(screenshot, new_screenshot_path)
+        try:
+            shutil.copy(screenshot, new_screenshot_path)
+        except OSError as e:
+            sanitized_error = sanitize_error_message(str(e), (screenshot, new_screenshot_path))
+            raise ValueError(
+                f"Failed to copy screenshot {sanitize_path_for_error(screenshot)} "
+                f"to {sanitize_path_for_error(new_screenshot_path)}: {sanitized_error}"
+            ) from e
         copied_screenshots += (Path(destination) / new_screenshot_name,)
 
     return copied_screenshots
@@ -701,6 +833,9 @@ def convert_image_format(source_path: Path, target_format: str) -> Path:
     if source_path.suffix.lower().replace(".", "") == target_format:
         return source_path
 
+    # Precompute destination path so it can be sanitized on failure
+    new_path = source_path.with_suffix(f".{target_format}")
+
     try:
         with Image.open(source_path) as img:
             # Convert RGBA to RGB for JPEG (JPEG doesn't support transparency)
@@ -711,9 +846,6 @@ def convert_image_format(source_path: Path, target_format: str) -> Path:
                     img = img.convert("RGBA")
                 rgb_img.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
                 img = rgb_img
-
-            # Create new filename with target extension
-            new_path = source_path.with_suffix(f".{target_format}")
 
             # Save with appropriate format
             if target_format == "jpg":
@@ -732,7 +864,9 @@ def convert_image_format(source_path: Path, target_format: str) -> Path:
             return new_path
 
     except Exception as e:
-        raise ValueError(f"Failed to convert image: {e}") from e
+        sanitized_error = sanitize_error_message(str(e), (source_path, new_path))
+        sanitized_path = sanitize_path_for_error(source_path)
+        raise ValueError(f"Failed to convert image {sanitized_path}: {sanitized_error}") from e
 
 
 def stage_screenshots(screenshots: tuple[Path, ...], git_root: Path) -> None:
@@ -891,7 +1025,15 @@ def migrate_config(config_path: Path, *, dry_run: bool = False) -> dict[str, Any
     try:
         with open(config_path, "r", encoding="UTF-8") as f:
             config = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError) as e:
+    except FileNotFoundError as e:
+        sanitized_error = format_path_error(e)
+        return {
+            "migrated": False,
+            "changes": [],
+            "error": f"Cannot read config: {sanitized_error}",
+            "config": {},
+        }
+    except json.JSONDecodeError as e:
         return {
             "migrated": False,
             "changes": [],
@@ -921,10 +1063,11 @@ def migrate_config(config_path: Path, *, dry_run: bool = False) -> dict[str, Any
         try:
             atomic_write_json(config_path, config)
         except OSError as e:
+            sanitized_error = sanitize_error_message(str(e), (config_path,))
             return {
                 "migrated": False,
                 "changes": changes,
-                "error": f"Cannot write config: {e}",
+                "error": f"Cannot write config: {sanitized_error}",
                 "config": config,
             }
 
@@ -1020,7 +1163,8 @@ def write_config(config_file_path: Path) -> None:
     try:
         atomic_write_json(config_file_path, config)
     except FileNotFoundError as error:
-        click.echo(f"Failed to write configuration file: {error}", err=True)
+        sanitized_error = format_path_error(error)
+        click.echo(f"Failed to write configuration file: {sanitized_error}", err=True)
         sys.exit(1)
 
     if current_config:
@@ -1058,13 +1202,15 @@ def get_validated_directory_input(field, message, current_config, default) -> st
         try:
             return str(resolve_path_safely(directory))
         except ValueError as error:
+            sanitized_msg = format_path_error(error)
             click.echo(
-                click.style(f"Security Error: {error}", fg="red"),
+                click.style(f"Security Error: {sanitized_msg}", fg="red"),
                 err=True,
             )
         except FileNotFoundError as error:
+            sanitized_msg = format_path_error(error)
             click.echo(
-                click.style(f"Invalid {field.replace('_', ' ')}: {error}", fg="red"),
+                click.style(f"Invalid {field.replace('_', ' ')}: {sanitized_msg}", fg="red"),
                 err=True,
             )
         finally:
@@ -1104,10 +1250,12 @@ def set_default_source(source_str: str) -> None:
     try:
         source: str = str(resolve_path_safely(source_str))
     except ValueError as error:
-        click.echo(click.style(f"Security Error: {error}", fg="red"), err=True)
+        sanitized_msg = format_path_error(error)
+        click.echo(click.style(f"Security Error: {sanitized_msg}", fg="red"), err=True)
         sys.exit(1)
     except FileNotFoundError as error:
-        click.echo(click.style(f"Invalid source directory: {error}", fg="red"), err=True)
+        sanitized_msg = format_path_error(error)
+        click.echo(click.style(f"Invalid source directory: {sanitized_msg}", fg="red"), err=True)
         sys.exit(1)
 
     config_file_path = get_config_file_path()
@@ -1127,10 +1275,12 @@ def set_default_destination(destination_str: str) -> None:
     try:
         destination: str = str(resolve_path_safely(destination_str))
     except ValueError as error:
-        click.echo(click.style(f"Security Error: {error}", fg="red"), err=True)
+        sanitized_msg = format_path_error(error)
+        click.echo(click.style(f"Security Error: {sanitized_msg}", fg="red"), err=True)
         sys.exit(1)
     except FileNotFoundError as error:
-        click.echo(click.style(f"Invalid destination directory: {error}", fg="red"), err=True)
+        sanitized_msg = format_path_error(error)
+        click.echo(click.style(f"Invalid destination directory: {sanitized_msg}", fg="red"), err=True)
         sys.exit(1)
 
     config_file_path = get_config_file_path()
@@ -1372,7 +1522,7 @@ def migrate_config_cmd(dry_run):
         )
         sys.exit(0)
 
-    click.echo(f"Config file: {config_path}")
+    click.echo(f"Config file: {sanitize_path_for_error(config_path)}")
     click.echo()
 
     result = migrate_config(config_path, dry_run=dry_run)
