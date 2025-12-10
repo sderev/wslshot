@@ -74,6 +74,8 @@ def test_migrate_config_missing_file_returns_error(fake_home: Path) -> None:
     assert result["migrated"] is False
     assert result["changes"] == []
     assert "error" in result
+    assert "<...>/config.json" in result["error"]
+    assert str(config_path) not in result["error"]
     assert not config_path.exists()
 
 
