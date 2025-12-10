@@ -5,6 +5,7 @@ Unit tests for the suggest_format helper.
 from __future__ import annotations
 
 import pytest
+
 from wslshot import cli
 
 VALID_FORMATS = list(cli.VALID_OUTPUT_FORMATS)

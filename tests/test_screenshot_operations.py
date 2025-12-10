@@ -7,6 +7,7 @@ from uuid import UUID
 
 import pytest
 from conftest import create_test_image
+
 from wslshot import cli
 
 # ==================== Finding Screenshots Tests ====================

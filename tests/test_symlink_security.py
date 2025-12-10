@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from conftest import create_test_image
+
 from wslshot.cli import configure, fetch, resolve_path_safely
 
 

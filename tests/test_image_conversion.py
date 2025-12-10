@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from PIL import Image
+
 from wslshot.cli import convert_image_format
 
 

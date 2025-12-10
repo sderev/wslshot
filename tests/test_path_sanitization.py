@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from PIL import Image
+
 from wslshot.cli import (
     convert_image_format,
     copy_screenshots,

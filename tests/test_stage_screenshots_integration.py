@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from conftest import create_git_repo, create_test_image, get_staged_files, is_file_staged
+
 from wslshot import cli
 
 
