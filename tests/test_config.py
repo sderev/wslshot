@@ -980,9 +980,7 @@ class TestAtomicWriteJson:
 class TestConfigPermissionEnforcement:
     """Tests for secure config writing."""
 
-    def test_config_permissions_enforced_on_update(
-        self, fake_home: Path, tmp_path: Path
-    ) -> None:
+    def test_config_permissions_enforced_on_update(self, fake_home: Path, tmp_path: Path) -> None:
         """Ensure config permissions reset to 0o600 on update."""
         config_path = fake_home / ".config" / "wslshot" / "config.json"
         initial_config = {
@@ -1031,7 +1029,7 @@ class TestConfigPermissionEnforcement:
         assert "Warning: Config file had insecure permissions (0o666)" in captured.err
 
     def test_config_write_rejects_symlinks(
-        self, fake_home: Path, tmp_path: Path
+        self, fake_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Reject writing config when path is a symlink."""
         config_path = fake_home / ".config" / "wslshot" / "config.json"
@@ -1043,5 +1041,88 @@ class TestConfigPermissionEnforcement:
 
         new_source = tmp_path
 
-        with pytest.raises(cli.SecurityError):
+        exit_codes: list[int] = []
+
+        def mock_exit(code: int) -> None:
+            exit_codes.append(code)
+            raise SystemExit(code)
+
+        error_messages: list[str] = []
+        monkeypatch.setattr(sys, "exit", mock_exit)
+        monkeypatch.setattr(
+            "click.echo",
+            lambda msg=None, **kwargs: error_messages.append(msg)
+            if msg and kwargs.get("err")
+            else None,
+        )
+
+        with pytest.raises(SystemExit):
             cli.set_default_source(str(new_source))
+
+        assert exit_codes == [1]
+        assert any("Config file is a symlink" in str(msg) for msg in error_messages)
+
+    def test_config_write_rejects_broken_symlinks(
+        self, fake_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Reject writing config when path is a broken symlink."""
+        config_path = fake_home / ".config" / "wslshot" / "config.json"
+        target = tmp_path / "missing.json"
+        if config_path.exists():
+            config_path.unlink()
+        config_path.symlink_to(target)
+
+        new_source = tmp_path
+
+        exit_codes: list[int] = []
+
+        def mock_exit(code: int) -> None:
+            exit_codes.append(code)
+            raise SystemExit(code)
+
+        error_messages: list[str] = []
+        monkeypatch.setattr(sys, "exit", mock_exit)
+        monkeypatch.setattr(
+            "click.echo",
+            lambda msg=None, **kwargs: error_messages.append(msg)
+            if msg and kwargs.get("err")
+            else None,
+        )
+
+        with pytest.raises(SystemExit):
+            cli.set_default_source(str(new_source))
+
+        assert exit_codes == [1]
+        assert any("Config file is a symlink" in str(msg) for msg in error_messages)
+
+    def test_get_config_path_or_exit_rejects_symlink(
+        self, fake_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Ensure helper exits cleanly when config path is a symlink."""
+        config_path = fake_home / ".config" / "wslshot" / "config.json"
+        target = tmp_path / "real_config.json"
+        target.write_text("{}", encoding="UTF-8")
+        if config_path.exists():
+            config_path.unlink()
+        config_path.symlink_to(target)
+
+        exit_codes: list[int] = []
+
+        def mock_exit(code: int) -> None:
+            exit_codes.append(code)
+            raise SystemExit(code)
+
+        error_messages: list[str] = []
+        monkeypatch.setattr(sys, "exit", mock_exit)
+        monkeypatch.setattr(
+            "click.echo",
+            lambda msg=None, **kwargs: error_messages.append(msg)
+            if msg and kwargs.get("err")
+            else None,
+        )
+
+        with pytest.raises(SystemExit):
+            cli.get_config_file_path_or_exit()
+
+        assert exit_codes == [1]
+        assert any("Config file is a symlink" in str(msg) for msg in error_messages)
