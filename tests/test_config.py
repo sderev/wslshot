@@ -975,3 +975,73 @@ class TestAtomicWriteJson:
         assert len(fsync_targets) == 2, "fsync must be called for file and directory"
         assert any(stat.S_ISREG(mode) for mode in fsync_targets)
         assert any(stat.S_ISDIR(mode) for mode in fsync_targets)
+
+
+class TestConfigPermissionEnforcement:
+    """Tests for secure config writing."""
+
+    def test_config_permissions_enforced_on_update(
+        self, fake_home: Path, tmp_path: Path
+    ) -> None:
+        """Ensure config permissions reset to 0o600 on update."""
+        config_path = fake_home / ".config" / "wslshot" / "config.json"
+        initial_config = {
+            "default_source": "",
+            "default_destination": "",
+            "auto_stage_enabled": False,
+            "default_output_format": "markdown",
+        }
+        config_path.write_text(json.dumps(initial_config), encoding="UTF-8")
+        config_path.chmod(0o644)
+
+        new_source = tmp_path / "source"
+        new_source.mkdir()
+
+        cli.set_default_source(str(new_source))
+
+        assert (config_path.stat().st_mode & 0o777) == 0o600
+        with open(config_path, "r", encoding="UTF-8") as f:
+            config = json.load(f)
+        assert config["default_source"] == str(new_source.resolve())
+
+    def test_config_update_warns_on_insecure_permissions(
+        self, fake_home: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Ensure warning is emitted when permissions are fixed."""
+        config_path = fake_home / ".config" / "wslshot" / "config.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "default_source": "",
+                    "default_destination": "",
+                    "auto_stage_enabled": False,
+                    "default_output_format": "markdown",
+                }
+            ),
+            encoding="UTF-8",
+        )
+        config_path.chmod(0o666)
+
+        new_source = tmp_path / "source"
+        new_source.mkdir()
+
+        cli.set_default_source(str(new_source))
+
+        captured = capsys.readouterr()
+        assert "Warning: Config file had insecure permissions (0o666)" in captured.err
+
+    def test_config_write_rejects_symlinks(
+        self, fake_home: Path, tmp_path: Path
+    ) -> None:
+        """Reject writing config when path is a symlink."""
+        config_path = fake_home / ".config" / "wslshot" / "config.json"
+        target = tmp_path / "real_config.json"
+        target.write_text("{}", encoding="UTF-8")
+        if config_path.exists():
+            config_path.unlink()
+        config_path.symlink_to(target)
+
+        new_source = tmp_path
+
+        with pytest.raises(cli.SecurityError):
+            cli.set_default_source(str(new_source))
