@@ -34,6 +34,10 @@ import click
 from click_default_group import DefaultGroup
 from PIL import Image
 
+
+class SecurityError(Exception):
+    """Security-related error."""
+
 # Hard maximum limits (non-bypassable security ceilings)
 # Config values are clamped to these limits to prevent DoS attacks
 HARD_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50MB per file
@@ -105,6 +109,40 @@ def atomic_write_json(path: Path, data: dict, mode: int = 0o600) -> None:
         except OSError:
             pass
         raise
+
+
+def write_config_safely(config_file_path: Path, config_data: dict[str, Any]) -> None:
+    """
+    Write configuration data while enforcing secure permissions.
+
+    Enforces 0o600 permissions before and after writes and rejects symlinked
+    config paths to prevent privilege escalation via symlink swaps.
+
+    Args:
+        config_file_path: Path to config file
+        config_data: Configuration dictionary to write
+
+    Raises:
+        SecurityError: If the config path is a symlink or permissions cannot be fixed
+    """
+    if config_file_path.exists() and config_file_path.is_symlink():
+        raise SecurityError("Config file is a symlink; refusing to write for safety.")
+
+    if config_file_path.exists():
+        current_perms = config_file_path.stat().st_mode & 0o777
+        if current_perms != 0o600:
+            click.echo(
+                f"Warning: Config file had insecure permissions ({oct(current_perms)}). "
+                "Resetting to 0o600.",
+                err=True,
+            )
+            try:
+                config_file_path.chmod(0o600)
+            except OSError as error:
+                sanitized = sanitize_error_message(str(error), (config_file_path,))
+                raise SecurityError(f"Failed to set secure permissions: {sanitized}") from error
+
+    atomic_write_json(config_file_path, config_data, mode=0o600)
 
 
 def resolve_path_safely(path_str: str, check_symlink: bool = True) -> Path:
@@ -975,7 +1013,7 @@ def get_config_file_path(*, create_if_missing: bool = True) -> Path:
                 "max_file_size_mb": MAX_IMAGE_FILE_SIZE_BYTES // (1024 * 1024),
                 "max_total_size_mb": MAX_TOTAL_IMAGE_SIZE_BYTES // (1024 * 1024),
             }
-            atomic_write_json(config_file_path, default_config, mode=0o600)
+            write_config_safely(config_file_path, default_config)
 
     return config_file_path
 
@@ -1062,8 +1100,8 @@ def migrate_config(config_path: Path, *, dry_run: bool = False) -> dict[str, Any
     # Write migrated config
     if changes and not dry_run:
         try:
-            atomic_write_json(config_path, config)
-        except OSError as e:
+            write_config_safely(config_path, config)
+        except (OSError, SecurityError) as e:
             sanitized_error = sanitize_error_message(str(e), (config_path,))
             return {
                 "migrated": False,
@@ -1162,8 +1200,8 @@ def write_config(config_file_path: Path) -> None:
 
     # Writing configuration to file
     try:
-        atomic_write_json(config_file_path, config)
-    except FileNotFoundError as error:
+        write_config_safely(config_file_path, config)
+    except (FileNotFoundError, SecurityError) as error:
         sanitized_error = format_path_error(error)
         click.echo(f"Failed to write configuration file: {sanitized_error}", err=True)
         sys.exit(1)
@@ -1263,7 +1301,7 @@ def set_default_source(source_str: str) -> None:
     config = read_config(config_file_path)
     config["default_source"] = source
 
-    atomic_write_json(config_file_path, config)
+    write_config_safely(config_file_path, config)
 
 
 def set_default_destination(destination_str: str) -> None:
@@ -1290,7 +1328,7 @@ def set_default_destination(destination_str: str) -> None:
     config = read_config(config_file_path)
     config["default_destination"] = destination
 
-    atomic_write_json(config_file_path, config)
+    write_config_safely(config_file_path, config)
 
 
 def get_destination() -> Path:
@@ -1385,7 +1423,7 @@ def set_auto_stage(auto_stage_enabled: bool) -> None:
     config = read_config(config_file_path)
     config["auto_stage_enabled"] = auto_stage_enabled
 
-    atomic_write_json(config_file_path, config)
+    write_config_safely(config_file_path, config)
 
 
 def set_default_output_format(output_format: str) -> None:
@@ -1407,7 +1445,7 @@ def set_default_output_format(output_format: str) -> None:
     config = read_config(config_file_path)
     config["default_output_format"] = output_format.casefold()
 
-    atomic_write_json(config_file_path, config)
+    write_config_safely(config_file_path, config)
 
 
 def set_default_convert_to(convert_format: str | None) -> None:
@@ -1433,7 +1471,7 @@ def set_default_convert_to(convert_format: str | None) -> None:
     config = read_config(config_file_path)
     config["default_convert_to"] = convert_format
 
-    atomic_write_json(config_file_path, config)
+    write_config_safely(config_file_path, config)
 
 
 @wslshot.command()
