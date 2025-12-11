@@ -38,6 +38,7 @@ from PIL import Image
 class SecurityError(Exception):
     """Security-related error."""
 
+
 # Hard maximum limits (non-bypassable security ceilings)
 # Config values are clamped to these limits to prevent DoS attacks
 HARD_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50MB per file
@@ -125,7 +126,7 @@ def write_config_safely(config_file_path: Path, config_data: dict[str, Any]) -> 
     Raises:
         SecurityError: If the config path is a symlink or permissions cannot be fixed
     """
-    if config_file_path.exists() and config_file_path.is_symlink():
+    if config_file_path.is_symlink():
         raise SecurityError("Config file is a symlink; refusing to write for safety.")
 
     if config_file_path.exists():
@@ -143,6 +144,18 @@ def write_config_safely(config_file_path: Path, config_data: dict[str, Any]) -> 
                 raise SecurityError(f"Failed to set secure permissions: {sanitized}") from error
 
     atomic_write_json(config_file_path, config_data, mode=0o600)
+
+
+def write_config_or_exit(config_file_path: Path, config_data: dict[str, Any]) -> None:
+    """
+    Persist config changes and present user-friendly failures.
+    """
+    try:
+        write_config_safely(config_file_path, config_data)
+    except (FileNotFoundError, SecurityError, OSError) as error:
+        sanitized_error = format_path_error(error)
+        click.echo(f"Failed to write configuration file: {sanitized_error}", err=True)
+        sys.exit(1)
 
 
 def resolve_path_safely(path_str: str, check_symlink: bool = True) -> Path:
@@ -514,7 +527,7 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
     - count: The number of screenshots to fetch.
     - output: The output format.
     """
-    config = read_config(get_config_file_path())
+    config = read_config(get_config_file_path_or_exit())
     max_file_size_bytes, max_total_size_bytes = get_size_limits(config)
 
     # Source directory
@@ -999,6 +1012,10 @@ def get_config_file_path(*, create_if_missing: bool = True) -> Path:
     Get the configuration file path, optionally creating the file.
     """
     config_file_path = Path.home() / ".config" / "wslshot" / "config.json"
+
+    if config_file_path.is_symlink():
+        raise SecurityError("Config file is a symlink; refusing to use it.")
+
     if create_if_missing:
         config_file_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1016,6 +1033,15 @@ def get_config_file_path(*, create_if_missing: bool = True) -> Path:
             write_config_safely(config_file_path, default_config)
 
     return config_file_path
+
+
+def get_config_file_path_or_exit(*, create_if_missing: bool = True) -> Path:
+    """Return config path or exit with a user-friendly security error."""
+    try:
+        return get_config_file_path(create_if_missing=create_if_missing)
+    except SecurityError as error:
+        click.echo(click.style(f"Security Error: {error}", fg="red"), err=True)
+        sys.exit(1)
 
 
 def read_config(config_file_path: Path) -> dict[str, Any]:
@@ -1199,12 +1225,7 @@ def write_config(config_file_path: Path) -> None:
             config[field] = get_config_input(field, message, current_config, default)
 
     # Writing configuration to file
-    try:
-        write_config_safely(config_file_path, config)
-    except (FileNotFoundError, SecurityError) as error:
-        sanitized_error = format_path_error(error)
-        click.echo(f"Failed to write configuration file: {sanitized_error}", err=True)
-        sys.exit(1)
+    write_config_or_exit(config_file_path, config)
 
     if current_config:
         click.echo(f"{click.style('Configuration file updated', fg='green')}")
@@ -1297,11 +1318,11 @@ def set_default_source(source_str: str) -> None:
         click.echo(click.style(f"Invalid source directory: {sanitized_msg}", fg="red"), err=True)
         sys.exit(1)
 
-    config_file_path = get_config_file_path()
+    config_file_path = get_config_file_path_or_exit()
     config = read_config(config_file_path)
     config["default_source"] = source
 
-    write_config_safely(config_file_path, config)
+    write_config_or_exit(config_file_path, config)
 
 
 def set_default_destination(destination_str: str) -> None:
@@ -1324,11 +1345,11 @@ def set_default_destination(destination_str: str) -> None:
         )
         sys.exit(1)
 
-    config_file_path = get_config_file_path()
+    config_file_path = get_config_file_path_or_exit()
     config = read_config(config_file_path)
     config["default_destination"] = destination
 
-    write_config_safely(config_file_path, config)
+    write_config_or_exit(config_file_path, config)
 
 
 def get_destination() -> Path:
@@ -1341,7 +1362,7 @@ def get_destination() -> Path:
     if is_git_repo():
         return get_git_repo_img_destination()
 
-    config = read_config(get_config_file_path())
+    config = read_config(get_config_file_path_or_exit())
     if config["default_destination"]:
         return Path(config["default_destination"])
 
@@ -1419,11 +1440,11 @@ def set_auto_stage(auto_stage_enabled: bool) -> None:
     Args:
         auto_stage_enabled: Whether screenshots are automatically staged when copied to a Git repo.
     """
-    config_file_path = get_config_file_path()
+    config_file_path = get_config_file_path_or_exit()
     config = read_config(config_file_path)
     config["auto_stage_enabled"] = auto_stage_enabled
 
-    write_config_safely(config_file_path, config)
+    write_config_or_exit(config_file_path, config)
 
 
 def set_default_output_format(output_format: str) -> None:
@@ -1441,11 +1462,11 @@ def set_default_output_format(output_format: str) -> None:
             click.echo(click.style(suggestion, fg="yellow"), err=True)
         sys.exit(1)
 
-    config_file_path = get_config_file_path()
+    config_file_path = get_config_file_path_or_exit()
     config = read_config(config_file_path)
     config["default_output_format"] = output_format.casefold()
 
-    write_config_safely(config_file_path, config)
+    write_config_or_exit(config_file_path, config)
 
 
 def set_default_convert_to(convert_format: str | None) -> None:
@@ -1467,11 +1488,11 @@ def set_default_convert_to(convert_format: str | None) -> None:
     else:
         convert_format = None
 
-    config_file_path = get_config_file_path()
+    config_file_path = get_config_file_path_or_exit()
     config = read_config(config_file_path)
     config["default_convert_to"] = convert_format
 
-    write_config_safely(config_file_path, config)
+    write_config_or_exit(config_file_path, config)
 
 
 @wslshot.command()
@@ -1519,7 +1540,7 @@ def configure(source, destination, auto_stage_enabled, output_format, convert_to
     """
     # When no options are specified, ask the user for their preferences.
     if all(x is None for x in (source, destination, auto_stage_enabled, output_format, convert_to)):
-        write_config(get_config_file_path())
+        write_config(get_config_file_path_or_exit())
 
     # Otherwise, set the specified options.
     if source:
@@ -1554,7 +1575,7 @@ def migrate_config_cmd(dry_run):
 
     Use --dry-run to preview changes before applying.
     """
-    config_path = get_config_file_path(create_if_missing=False)
+    config_path = get_config_file_path_or_exit(create_if_missing=False)
 
     if not config_path.exists():
         click.echo(
