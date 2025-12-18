@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import click
 import pytest
 
 from wslshot import cli
@@ -310,6 +311,107 @@ class TestWriteConfig:
 
         # Permissions should still be 0o600
         assert (config_file.stat().st_mode & 0o777) == 0o600
+
+
+class TestUpdateConfigField:
+    """Tests for update_config_field() function."""
+
+    def test_update_config_field_validates_field_name(self) -> None:
+        """Test that invalid field names are rejected."""
+        with pytest.raises(click.ClickException, match="Invalid config field"):
+            cli.update_config_field("invalid_field", "value")
+
+    def test_update_config_field_preserves_other_fields(self, fake_home: Path) -> None:
+        """Test that updating one field doesn't affect others."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        initial_config = {
+            "default_source": "/some/source",
+            "default_destination": "/some/destination",
+            "auto_stage_enabled": True,
+            "default_output_format": "html",
+            "default_convert_to": "png",
+        }
+        config_file.write_text(json.dumps(initial_config), encoding="UTF-8")
+        config_file.chmod(0o600)
+
+        cli.update_config_field("auto_stage_enabled", False)
+
+        with open(config_file, "r", encoding="UTF-8") as f:
+            config = json.load(f)
+
+        assert config["auto_stage_enabled"] is False
+        assert config["default_source"] == initial_config["default_source"]
+        assert config["default_destination"] == initial_config["default_destination"]
+        assert config["default_output_format"] == initial_config["default_output_format"]
+        assert config["default_convert_to"] == initial_config["default_convert_to"]
+
+    def test_update_config_field_preserves_permissions(self, fake_home: Path) -> None:
+        """Test that update_config_field maintains 0o600 permissions after update."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        initial_config = {
+            "default_source": "/some/source",
+            "default_destination": "/some/destination",
+            "auto_stage_enabled": True,
+            "default_output_format": "html",
+            "default_convert_to": "png",
+        }
+        config_file.write_text(json.dumps(initial_config), encoding="UTF-8")
+        config_file.chmod(0o600)
+
+        cli.update_config_field("auto_stage_enabled", False)
+
+        assert (config_file.stat().st_mode & 0o777) == 0o600
+
+    def test_update_config_field_normalizes_output_format(self, fake_home: Path) -> None:
+        """Test that update_config_field normalizes output format values."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        config_file.write_text(json.dumps({"default_output_format": "markdown"}), encoding="UTF-8")
+        config_file.chmod(0o600)
+
+        cli.update_config_field("default_output_format", "HTML")
+
+        config = json.loads(config_file.read_text(encoding="UTF-8"))
+        assert config["default_output_format"] == "html"
+
+    def test_update_config_field_rejects_invalid_value(self) -> None:
+        """Test that invalid config values are rejected."""
+        with pytest.raises(click.ClickException, match="Invalid value for default_output_format"):
+            cli.update_config_field("default_output_format", "not-a-format")
+
+    def test_update_config_field_normalizes_convert_to(self, fake_home: Path) -> None:
+        """Test that update_config_field normalizes `default_convert_to` values."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        config_file.write_text("{}", encoding="UTF-8")
+        config_file.chmod(0o600)
+
+        cli.update_config_field("default_convert_to", "WEBP")
+        config = json.loads(config_file.read_text(encoding="UTF-8"))
+        assert config["default_convert_to"] == "webp"
+
+        cli.update_config_field("default_convert_to", "")
+        config = json.loads(config_file.read_text(encoding="UTF-8"))
+        assert config["default_convert_to"] is None
+
+    def test_update_config_field_rejects_invalid_convert_to(self) -> None:
+        """Test that update_config_field rejects invalid conversion formats."""
+        with pytest.raises(click.ClickException, match="Invalid value for default_convert_to"):
+            cli.update_config_field("default_convert_to", "tiff")
+
+    def test_update_config_field_validates_directory(self, fake_home: Path, tmp_path: Path) -> None:
+        """Test that update_config_field validates directory paths."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        config_file.write_text("{}", encoding="UTF-8")
+        config_file.chmod(0o600)
+
+        source_dir = tmp_path / "source"
+        source_dir.mkdir()
+
+        cli.update_config_field("default_source", str(source_dir))
+        config = json.loads(config_file.read_text(encoding="UTF-8"))
+        assert config["default_source"] == str(source_dir.resolve())
+
+        with pytest.raises(click.ClickException, match="Invalid value for default_source"):
+            cli.update_config_field("default_source", str(tmp_path / "missing"))
 
 
 class TestSetDefaultSource:
@@ -619,6 +721,27 @@ class TestGetConfigInput:
         assert result == "existing_value"
         assert len(prompt_calls) == 1
         assert prompt_calls[0][1]["default"] == "existing_value"
+
+    def test_get_config_input_uses_default_when_existing_is_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that get_config_input uses `default` when existing value is None."""
+        current_config: dict[str, str | None] = {"test_field": None}
+
+        prompt_calls: list[tuple[str, dict[str, Any]]] = []
+
+        def mock_prompt(text: str, **kwargs: Any) -> str:
+            prompt_calls.append((text, kwargs))
+            return kwargs["default"]
+
+        monkeypatch.setattr("click.prompt", mock_prompt)
+        monkeypatch.setattr("click.style", lambda text, **kwargs: text)
+
+        result = cli.get_config_input("test_field", "Enter test field", current_config, "default")
+
+        assert result == "default"
+        assert len(prompt_calls) == 1
+        assert prompt_calls[0][1]["default"] == "default"
 
     def test_get_config_input_accepts_new_input(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that get_config_input accepts new user input."""

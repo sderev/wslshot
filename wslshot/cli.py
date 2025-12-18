@@ -26,6 +26,8 @@ import sys
 import tempfile
 import uuid
 import warnings
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from stat import S_ISREG
 from typing import Any
@@ -57,8 +59,142 @@ GIF_TRAILER = b"\x3b"
 # Valid output formats
 VALID_OUTPUT_FORMATS = ("markdown", "html", "text")
 
+# Valid conversion target formats (lowercase, without dot)
+VALID_CONVERT_FORMATS = ("png", "jpg", "jpeg", "webp", "gif")
+
 # Supported image file extensions (lowercase)
 SUPPORTED_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif")
+
+
+def normalize_optional_directory(value: Any) -> str:
+    if value is None:
+        return ""
+
+    if isinstance(value, Path):
+        value = str(value)
+
+    if not isinstance(value, str):
+        raise TypeError("Directory path must be a string.")
+
+    if not value.strip():
+        return ""
+
+    return str(resolve_path_safely(value))
+
+
+def normalize_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        if normalized in {"true", "1", "yes", "y", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "n", "off"}:
+            return False
+
+    raise TypeError("Boolean value must be a bool.")
+
+
+def normalize_output_format(value: Any) -> str:
+    if not isinstance(value, str):
+        raise TypeError("Output format must be a string.")
+
+    normalized = value.casefold()
+    if normalized not in VALID_OUTPUT_FORMATS:
+        suggestion = suggest_format(value, list(VALID_OUTPUT_FORMATS))
+        message = (
+            f"Invalid output format: {value}. Valid options are: {', '.join(VALID_OUTPUT_FORMATS)}."
+        )
+        if suggestion:
+            message = f"{message} {suggestion}"
+        raise ValueError(message)
+
+    return normalized
+
+
+def normalize_default_convert_to(value: Any) -> str | None:
+    if value is None:
+        return None
+
+    if not isinstance(value, str):
+        raise TypeError("Conversion format must be a string or None.")
+
+    normalized = value.strip().lower().replace(".", "")
+    if not normalized:
+        return None
+
+    if normalized not in VALID_CONVERT_FORMATS:
+        raise ValueError(
+            f"Invalid conversion format: {value}. "
+            f"Valid options are: {', '.join(VALID_CONVERT_FORMATS)}."
+        )
+
+    return normalized
+
+
+def normalize_int(value: Any) -> int:
+    if isinstance(value, bool):
+        raise TypeError("Value must be an int.")
+
+    if isinstance(value, int):
+        return value
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Value cannot be empty.")
+        return int(stripped)
+
+    raise TypeError("Value must be an int.")
+
+
+@dataclass(frozen=True)
+class ConfigFieldSpec:
+    prompt: str
+    default: Any
+    normalize: Callable[[Any], Any]
+
+
+CONFIG_FIELD_SPECS: dict[str, ConfigFieldSpec] = {
+    "default_source": ConfigFieldSpec(
+        prompt="Enter the path for the default source directory",
+        default="",
+        normalize=normalize_optional_directory,
+    ),
+    "default_destination": ConfigFieldSpec(
+        prompt="Enter the path for the default destination directory",
+        default="",
+        normalize=normalize_optional_directory,
+    ),
+    "auto_stage_enabled": ConfigFieldSpec(
+        prompt="Automatically stage screenshots when copying to a git repository?",
+        default=False,
+        normalize=normalize_bool,
+    ),
+    "default_output_format": ConfigFieldSpec(
+        prompt="Enter the default output format (markdown, html, text)",
+        default="markdown",
+        normalize=normalize_output_format,
+    ),
+    "default_convert_to": ConfigFieldSpec(
+        prompt="Enter the default conversion format (png, jpg/jpeg, webp, gif, or leave empty for none)",
+        default=None,
+        normalize=normalize_default_convert_to,
+    ),
+    "max_file_size_mb": ConfigFieldSpec(
+        prompt="Enter the maximum allowed file size in MB (per file, hard limit: 50MB ceiling)",
+        default=MAX_IMAGE_FILE_SIZE_BYTES // (1024 * 1024),
+        normalize=normalize_int,
+    ),
+    "max_total_size_mb": ConfigFieldSpec(
+        prompt=(
+            "Enter the maximum total size in MB for a batch (hard limit: 200MB ceiling; <=0 applies ceiling)"
+        ),
+        default=MAX_TOTAL_IMAGE_SIZE_BYTES // (1024 * 1024),
+        normalize=normalize_int,
+    ),
+}
 
 
 def atomic_write_json(path: Path, data: dict, mode: int = 0o600) -> None:
@@ -506,8 +642,8 @@ def wslshot():
 @click.option(
     "--convert-to",
     "-c",
-    type=click.Choice(["png", "jpg", "jpeg", "webp", "gif"], case_sensitive=False),
-    help="Convert screenshot(s) to the specified format (png, jpg, webp, gif).",
+    type=click.Choice(list(VALID_CONVERT_FORMATS), case_sensitive=False),
+    help="Convert screenshot(s) to the specified format (png, jpg/jpeg, webp, gif).",
 )
 @click.option(
     "--allow-symlinks",
@@ -1021,15 +1157,7 @@ def get_config_file_path(*, create_if_missing: bool = True) -> Path:
 
         if not config_file_path.exists():
             # Write default config without interactive prompts
-            default_config = {
-                "default_source": "",
-                "default_destination": "",
-                "auto_stage_enabled": False,
-                "default_output_format": "markdown",
-                "default_convert_to": None,
-                "max_file_size_mb": MAX_IMAGE_FILE_SIZE_BYTES // (1024 * 1024),
-                "max_total_size_mb": MAX_TOTAL_IMAGE_SIZE_BYTES // (1024 * 1024),
-            }
+            default_config = {field: spec.default for field, spec in CONFIG_FIELD_SPECS.items()}
             write_config_safely(config_file_path, default_config)
 
     return config_file_path
@@ -1164,65 +1292,55 @@ def write_config(config_file_path: Path) -> None:
         click.echo(f"{click.style('Creating the configuration file...', fg='yellow')}")
     click.echo()
 
-    # Configuration fields
-    config_fields = {
-        "default_source": ("Enter the path for the default source directory", ""),
-        "default_destination": (
-            "Enter the path for the default destination directory",
-            "",
-        ),
-        "auto_stage_enabled": (
-            "Automatically stage screenshots when copying to a git repository?",
-            False,
-        ),
-        "default_output_format": (
-            "Enter the default output format (markdown, html, text)",
-            "markdown",
-        ),
-        "default_convert_to": (
-            "Enter the default conversion format (png, jpg, webp, gif, or leave empty for none)",
-            None,
-        ),
-        "max_file_size_mb": (
-            "Enter the maximum allowed file size in MB (per file, hard limit: 50MB ceiling)",
-            MAX_IMAGE_FILE_SIZE_BYTES // (1024 * 1024),
-        ),
-        "max_total_size_mb": (
-            "Enter the maximum total size in MB for a batch (hard limit: 200MB ceiling; <=0 applies ceiling)",
-            MAX_TOTAL_IMAGE_SIZE_BYTES // (1024 * 1024),
-        ),
-    }
-
     # Prompt the user for configuration values.
-    config = {}
-    for field, (message, default) in config_fields.items():
-        if field in ["default_source", "default_destination"]:
-            config[field] = get_validated_directory_input(field, message, current_config, default)
-        elif field == "auto_stage_enabled":
-            config[field] = get_config_boolean_input(field, message, current_config, default)
-        elif field == "default_output_format":
-            config[field] = get_validated_input(
+    config: dict[str, Any] = {}
+    for field, spec in CONFIG_FIELD_SPECS.items():
+        message = spec.prompt
+        default = spec.default
+
+        if field in ("default_source", "default_destination"):
+            value = get_validated_directory_input(field, message, current_config, default)
+            config[field] = spec.normalize(value)
+            continue
+
+        if field == "auto_stage_enabled":
+            value = get_config_boolean_input(field, message, current_config, default)
+            config[field] = spec.normalize(value)
+            continue
+
+        if field == "default_output_format":
+            value = get_validated_input(
                 field,
                 message,
                 current_config,
                 default,
                 options=list(VALID_OUTPUT_FORMATS),
             )
-        elif field == "default_convert_to":
-            value = get_config_input(field, message, current_config, default or "")
-            # Normalize: empty string or whitespace-only to None
-            if value and value.strip():
-                config[field] = value.strip().lower()
-            else:
-                config[field] = None
-        elif field in ("max_file_size_mb", "max_total_size_mb"):
+            config[field] = spec.normalize(value)
+            continue
+
+        if field == "default_convert_to":
+            while True:
+                value = get_config_input(field, message, current_config, default or "")
+                try:
+                    config[field] = spec.normalize(value)
+                except ValueError as error:
+                    click.echo(click.style(str(error), fg="red"))
+                    click.echo()
+                    continue
+                break
+            continue
+
+        if field in ("max_file_size_mb", "max_total_size_mb"):
             value = get_config_input(field, message, current_config, default)
             try:
-                config[field] = int(value)
+                config[field] = spec.normalize(value)
             except (TypeError, ValueError):
                 config[field] = default
-        else:
-            config[field] = get_config_input(field, message, current_config, default)
+            continue
+
+        value = get_config_input(field, message, current_config, default)
+        config[field] = spec.normalize(value)
 
     # Writing configuration to file
     write_config_or_exit(config_file_path, config)
@@ -1235,6 +1353,8 @@ def write_config(config_file_path: Path) -> None:
 
 def get_config_input(field, message, current_config, default="") -> str:
     existing = current_config.get(field, default)
+    if existing is None:
+        existing = default
     return click.prompt(
         click.style(message, fg="blue"),
         type=str,
@@ -1300,6 +1420,34 @@ def get_validated_input(field, message, current_config, default="", options=None
         return value
 
 
+def update_config_field(field: str, value: Any) -> None:
+    """
+    Update a single config field.
+
+    Args:
+        field: Config key to update
+        value: New value for the field
+
+    Raises:
+        click.ClickException: If `field` is not a valid config key or `value` is invalid
+    """
+    spec = CONFIG_FIELD_SPECS.get(field)
+    if spec is None:
+        raise click.ClickException(f"Invalid config field: {field}")
+
+    try:
+        normalized_value = spec.normalize(value)
+    except (ValueError, TypeError, FileNotFoundError) as error:
+        sanitized = format_path_error(error)
+        raise click.ClickException(f"Invalid value for {field}: {sanitized}") from error
+
+    config_file_path = get_config_file_path_or_exit()
+    config = read_config(config_file_path)
+    config[field] = normalized_value
+
+    write_config_or_exit(config_file_path, config)
+
+
 def set_default_source(source_str: str) -> None:
     """
     Set the default source directory.
@@ -1318,11 +1466,7 @@ def set_default_source(source_str: str) -> None:
         click.echo(click.style(f"Invalid source directory: {sanitized_msg}", fg="red"), err=True)
         sys.exit(1)
 
-    config_file_path = get_config_file_path_or_exit()
-    config = read_config(config_file_path)
-    config["default_source"] = source
-
-    write_config_or_exit(config_file_path, config)
+    update_config_field("default_source", source)
 
 
 def set_default_destination(destination_str: str) -> None:
@@ -1345,11 +1489,7 @@ def set_default_destination(destination_str: str) -> None:
         )
         sys.exit(1)
 
-    config_file_path = get_config_file_path_or_exit()
-    config = read_config(config_file_path)
-    config["default_destination"] = destination
-
-    write_config_or_exit(config_file_path, config)
+    update_config_field("default_destination", destination)
 
 
 def get_destination() -> Path:
@@ -1440,11 +1580,7 @@ def set_auto_stage(auto_stage_enabled: bool) -> None:
     Args:
         auto_stage_enabled: Whether screenshots are automatically staged when copied to a Git repo.
     """
-    config_file_path = get_config_file_path_or_exit()
-    config = read_config(config_file_path)
-    config["auto_stage_enabled"] = auto_stage_enabled
-
-    write_config_or_exit(config_file_path, config)
+    update_config_field("auto_stage_enabled", auto_stage_enabled)
 
 
 def set_default_output_format(output_format: str) -> None:
@@ -1462,11 +1598,7 @@ def set_default_output_format(output_format: str) -> None:
             click.echo(click.style(suggestion, fg="yellow"), err=True)
         sys.exit(1)
 
-    config_file_path = get_config_file_path_or_exit()
-    config = read_config(config_file_path)
-    config["default_output_format"] = output_format.casefold()
-
-    write_config_or_exit(config_file_path, config)
+    update_config_field("default_output_format", output_format.casefold())
 
 
 def set_default_convert_to(convert_format: str | None) -> None:
@@ -1474,25 +1606,21 @@ def set_default_convert_to(convert_format: str | None) -> None:
     Set the default image conversion format.
 
     Args:
-        convert_format: The default conversion format (png, jpg, webp, gif, or None).
+        convert_format: The default conversion format (png, jpg/jpeg, webp, gif, or None).
     """
     if convert_format and convert_format.strip():
         convert_format = convert_format.lower()
-        if convert_format not in ["png", "jpg", "jpeg", "webp", "gif"]:
+        if convert_format not in VALID_CONVERT_FORMATS:
             click.echo(
                 click.style(f"Invalid conversion format: {convert_format}", fg="red"),
                 err=True,
             )
-            click.echo("Valid options are: png, jpg, webp, gif", err=True)
+            click.echo(f"Valid options are: {', '.join(VALID_CONVERT_FORMATS)}", err=True)
             sys.exit(1)
     else:
         convert_format = None
 
-    config_file_path = get_config_file_path_or_exit()
-    config = read_config(config_file_path)
-    config["default_convert_to"] = convert_format
-
-    write_config_or_exit(config_file_path, config)
+    update_config_field("default_convert_to", convert_format)
 
 
 @wslshot.command()
@@ -1515,7 +1643,7 @@ def set_default_convert_to(convert_format: str | None) -> None:
 @click.option(
     "--convert-to",
     "-c",
-    type=click.Choice(["png", "jpg", "jpeg", "webp", "gif"], case_sensitive=False),
+    type=click.Choice(list(VALID_CONVERT_FORMATS), case_sensitive=False),
     help="Set the default image conversion format.",
 )
 def configure(source, destination, auto_stage_enabled, output_format, convert_to):
