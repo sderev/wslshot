@@ -1420,6 +1420,20 @@ def get_validated_input(field, message, current_config, default="", options=None
         return value
 
 
+def _write_config_field(field: str, normalized_value: Any) -> None:
+    """
+    Persist a single, already-normalized config field value.
+
+    This helper centralizes the read → update → write sequence for setter functions that
+    perform their own validation and normalization.
+    """
+    config_file_path = get_config_file_path_or_exit()
+    config = read_config(config_file_path)
+    config[field] = normalized_value
+
+    write_config_or_exit(config_file_path, config)
+
+
 def update_config_field(field: str, value: Any) -> None:
     """
     Update a single config field.
@@ -1441,11 +1455,7 @@ def update_config_field(field: str, value: Any) -> None:
         sanitized = format_path_error(error)
         raise click.ClickException(f"Invalid value for {field}: {sanitized}") from error
 
-    config_file_path = get_config_file_path_or_exit()
-    config = read_config(config_file_path)
-    config[field] = normalized_value
-
-    write_config_or_exit(config_file_path, config)
+    _write_config_field(field, normalized_value)
 
 
 def set_default_source(source_str: str) -> None:
@@ -1453,20 +1463,25 @@ def set_default_source(source_str: str) -> None:
     Set the default source directory.
 
     Args:
-        source: The default source directory.
+        source_str: The default source directory.
     """
-    try:
-        source: str = str(resolve_path_safely(source_str))
-    except ValueError as error:
-        sanitized_msg = format_path_error(error)
-        click.echo(click.style(f"Security Error: {sanitized_msg}", fg="red"), err=True)
-        sys.exit(1)
-    except FileNotFoundError as error:
-        sanitized_msg = format_path_error(error)
-        click.echo(click.style(f"Invalid source directory: {sanitized_msg}", fg="red"), err=True)
-        sys.exit(1)
+    if not source_str.strip():
+        source = ""
+    else:
+        try:
+            source = str(resolve_path_safely(source_str))
+        except ValueError as error:
+            sanitized_msg = format_path_error(error)
+            click.echo(click.style(f"Security Error: {sanitized_msg}", fg="red"), err=True)
+            sys.exit(1)
+        except FileNotFoundError as error:
+            sanitized_msg = format_path_error(error)
+            click.echo(
+                click.style(f"Invalid source directory: {sanitized_msg}", fg="red"), err=True
+            )
+            sys.exit(1)
 
-    update_config_field("default_source", source)
+    _write_config_field("default_source", source)
 
 
 def set_default_destination(destination_str: str) -> None:
@@ -1474,22 +1489,25 @@ def set_default_destination(destination_str: str) -> None:
     Set the default destination directory.
 
     Args:
-        destination: The default destination directory.
+        destination_str: The default destination directory.
     """
-    try:
-        destination: str = str(resolve_path_safely(destination_str))
-    except ValueError as error:
-        sanitized_msg = format_path_error(error)
-        click.echo(click.style(f"Security Error: {sanitized_msg}", fg="red"), err=True)
-        sys.exit(1)
-    except FileNotFoundError as error:
-        sanitized_msg = format_path_error(error)
-        click.echo(
-            click.style(f"Invalid destination directory: {sanitized_msg}", fg="red"), err=True
-        )
-        sys.exit(1)
+    if not destination_str.strip():
+        destination = ""
+    else:
+        try:
+            destination = str(resolve_path_safely(destination_str))
+        except ValueError as error:
+            sanitized_msg = format_path_error(error)
+            click.echo(click.style(f"Security Error: {sanitized_msg}", fg="red"), err=True)
+            sys.exit(1)
+        except FileNotFoundError as error:
+            sanitized_msg = format_path_error(error)
+            click.echo(
+                click.style(f"Invalid destination directory: {sanitized_msg}", fg="red"), err=True
+            )
+            sys.exit(1)
 
-    update_config_field("default_destination", destination)
+    _write_config_field("default_destination", destination)
 
 
 def get_destination() -> Path:
@@ -1598,7 +1616,7 @@ def set_default_output_format(output_format: str) -> None:
             click.echo(click.style(suggestion, fg="yellow"), err=True)
         sys.exit(1)
 
-    update_config_field("default_output_format", output_format.casefold())
+    _write_config_field("default_output_format", output_format.casefold())
 
 
 def set_default_convert_to(convert_format: str | None) -> None:
@@ -1608,19 +1626,13 @@ def set_default_convert_to(convert_format: str | None) -> None:
     Args:
         convert_format: The default conversion format (png, jpg/jpeg, webp, gif, or None).
     """
-    if convert_format and convert_format.strip():
-        convert_format = convert_format.lower()
-        if convert_format not in VALID_CONVERT_FORMATS:
-            click.echo(
-                click.style(f"Invalid conversion format: {convert_format}", fg="red"),
-                err=True,
-            )
-            click.echo(f"Valid options are: {', '.join(VALID_CONVERT_FORMATS)}", err=True)
-            sys.exit(1)
-    else:
-        convert_format = None
+    try:
+        normalized_convert_format = normalize_default_convert_to(convert_format)
+    except (TypeError, ValueError) as error:
+        click.echo(click.style(str(error), fg="red"), err=True)
+        sys.exit(1)
 
-    update_config_field("default_convert_to", convert_format)
+    _write_config_field("default_convert_to", normalized_convert_format)
 
 
 @wslshot.command()

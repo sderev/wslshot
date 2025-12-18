@@ -500,6 +500,26 @@ class TestSetDefaultSource:
         assert config["auto_stage_enabled"] is True
         assert config["default_output_format"] == "html"
 
+    def test_set_default_source_allows_blank_to_clear(self, fake_home: Path) -> None:
+        """Test that set_default_source can clear the configured value with blank input."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        initial_config = {
+            "default_source": "/some/source",
+            "default_destination": "/some/path",
+            "auto_stage_enabled": True,
+            "default_output_format": "html",
+        }
+
+        config_file.write_text(json.dumps(initial_config), encoding="UTF-8")
+
+        cli.set_default_source("   ")
+
+        config = json.loads(config_file.read_text(encoding="UTF-8"))
+        assert config["default_source"] == ""
+        assert config["default_destination"] == initial_config["default_destination"]
+        assert config["auto_stage_enabled"] == initial_config["auto_stage_enabled"]
+        assert config["default_output_format"] == initial_config["default_output_format"]
+
 
 class TestSetDefaultDestination:
     """Tests for set_default_destination() function."""
@@ -559,6 +579,26 @@ class TestSetDefaultDestination:
 
         assert exit_codes == [1]
         assert any("Invalid destination directory" in str(msg) for msg in error_messages)
+
+    def test_set_default_destination_allows_blank_to_clear(self, fake_home: Path) -> None:
+        """Test that set_default_destination can clear the configured value with blank input."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        initial_config = {
+            "default_source": "/some/source",
+            "default_destination": "/some/destination",
+            "auto_stage_enabled": True,
+            "default_output_format": "html",
+        }
+
+        config_file.write_text(json.dumps(initial_config), encoding="UTF-8")
+
+        cli.set_default_destination("")
+
+        config = json.loads(config_file.read_text(encoding="UTF-8"))
+        assert config["default_destination"] == ""
+        assert config["default_source"] == initial_config["default_source"]
+        assert config["auto_stage_enabled"] == initial_config["auto_stage_enabled"]
+        assert config["default_output_format"] == initial_config["default_output_format"]
 
 
 class TestSetAutoStage:
@@ -632,7 +672,7 @@ class TestSetDefaultOutputFormat:
 
         assert config["default_output_format"] == "html"
 
-    def test_set_default_output_format_plain_text(self, fake_home: Path) -> None:
+    def test_set_default_output_format_text(self, fake_home: Path) -> None:
         """Test setting default output format to text."""
         config_file = fake_home / ".config" / "wslshot" / "config.json"
         config_file.write_text('{"default_output_format": "markdown"}')
@@ -697,6 +737,54 @@ class TestSetDefaultOutputFormat:
         assert exit_codes == [1]
         assert any("Invalid output format" in str(msg) for msg in error_messages)
         assert any("Valid options are" in str(msg) for msg in error_messages)
+
+
+class TestSetDefaultConvertTo:
+    """Tests for set_default_convert_to() function."""
+
+    def test_set_default_convert_to_normalizes_value(self, fake_home: Path) -> None:
+        """Test that set_default_convert_to normalizes input."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        config_file.write_text(json.dumps({"default_convert_to": None}), encoding="UTF-8")
+
+        cli.set_default_convert_to(".WEBP")
+
+        config = json.loads(config_file.read_text(encoding="UTF-8"))
+        assert config["default_convert_to"] == "webp"
+
+        cli.set_default_convert_to("")
+
+        config = json.loads(config_file.read_text(encoding="UTF-8"))
+        assert config["default_convert_to"] is None
+
+    def test_set_default_convert_to_invalid_exits(
+        self, fake_home: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that set_default_convert_to exits with code 1 for invalid formats."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        config_file.write_text(json.dumps({"default_convert_to": None}), encoding="UTF-8")
+
+        exit_codes: list[int] = []
+
+        def mock_exit(code: int) -> None:
+            exit_codes.append(code)
+            raise SystemExit(code)
+
+        monkeypatch.setattr(sys, "exit", mock_exit)
+
+        error_messages: list[str] = []
+        monkeypatch.setattr(
+            "click.echo",
+            lambda msg=None, **kwargs: error_messages.append(msg)
+            if msg and kwargs.get("err")
+            else None,
+        )
+
+        with pytest.raises(SystemExit):
+            cli.set_default_convert_to("tiff")
+
+        assert exit_codes == [1]
+        assert any("Invalid conversion format" in str(msg) for msg in error_messages)
 
 
 class TestGetConfigInput:
