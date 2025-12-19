@@ -30,7 +30,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from stat import S_ISREG
-from typing import Any
 
 import click
 from click_default_group import DefaultGroup
@@ -89,7 +88,7 @@ VALID_CONVERT_FORMATS = ("png", "jpg", "jpeg", "webp", "gif")
 SUPPORTED_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif")
 
 
-def normalize_optional_directory(value: Any) -> str:
+def normalize_optional_directory(value: object) -> str:
     if value is None:
         return ""
 
@@ -105,7 +104,7 @@ def normalize_optional_directory(value: Any) -> str:
     return str(resolve_path_safely(value))
 
 
-def normalize_bool(value: Any) -> bool:
+def normalize_bool(value: object) -> bool:
     if isinstance(value, bool):
         return value
 
@@ -119,7 +118,7 @@ def normalize_bool(value: Any) -> bool:
     raise TypeError("Boolean value must be a bool.")
 
 
-def normalize_output_format(value: Any) -> str:
+def normalize_output_format(value: object) -> str:
     if not isinstance(value, str):
         raise TypeError("Output format must be a string.")
 
@@ -136,7 +135,7 @@ def normalize_output_format(value: Any) -> str:
     return normalized
 
 
-def normalize_default_convert_to(value: Any) -> str | None:
+def normalize_default_convert_to(value: object) -> str | None:
     if value is None:
         return None
 
@@ -156,7 +155,7 @@ def normalize_default_convert_to(value: Any) -> str | None:
     return normalized
 
 
-def normalize_int(value: Any) -> int:
+def normalize_int(value: object) -> int:
     if isinstance(value, bool):
         raise TypeError("Value must be an int.")
 
@@ -175,8 +174,8 @@ def normalize_int(value: Any) -> int:
 @dataclass(frozen=True)
 class ConfigFieldSpec:
     prompt: str
-    default: Any
-    normalize: Callable[[Any], Any]
+    default: object
+    normalize: Callable[[object], object]
 
 
 CONFIG_FIELD_SPECS: dict[str, ConfigFieldSpec] = {
@@ -220,7 +219,7 @@ CONFIG_FIELD_SPECS: dict[str, ConfigFieldSpec] = {
 }
 
 
-DEFAULT_CONFIG: dict[str, Any] = {field: spec.default for field, spec in CONFIG_FIELD_SPECS.items()}
+DEFAULT_CONFIG: dict[str, object] = {field: spec.default for field, spec in CONFIG_FIELD_SPECS.items()}
 
 
 def atomic_write_json(path: Path, data: dict, mode: int = CONFIG_FILE_PERMISSIONS) -> None:
@@ -274,7 +273,7 @@ def atomic_write_json(path: Path, data: dict, mode: int = CONFIG_FILE_PERMISSION
         raise
 
 
-def write_config_safely(config_file_path: Path, config_data: dict[str, Any]) -> None:
+def write_config_safely(config_file_path: Path, config_data: dict[str, object]) -> None:
     """
     Write configuration data while enforcing secure permissions.
 
@@ -308,7 +307,7 @@ def write_config_safely(config_file_path: Path, config_data: dict[str, Any]) -> 
     atomic_write_json(config_file_path, config_data, mode=CONFIG_FILE_PERMISSIONS)
 
 
-def write_config_or_exit(config_file_path: Path, config_data: dict[str, Any]) -> None:
+def write_config_or_exit(config_file_path: Path, config_data: dict[str, object]) -> None:
     """
     Persist config changes and present user-friendly failures.
     """
@@ -570,7 +569,7 @@ def validate_image_file(
         raise ValueError(f"File is not a valid image: {file_path.name}") from e
 
 
-def get_size_limits(config: dict[str, Any]) -> tuple[int, int | None]:
+def get_size_limits(config: dict[str, object]) -> tuple[int, int | None]:
     """
     Resolve per-file and aggregate size limits from config (in MB).
 
@@ -1200,7 +1199,7 @@ def get_config_file_path_or_exit(*, create_if_missing: bool = True) -> Path:
         sys.exit(1)
 
 
-def read_config(config_file_path: Path) -> dict[str, Any]:
+def read_config(config_file_path: Path) -> dict[str, object]:
     """
     Read the configuration file.
 
@@ -1224,7 +1223,7 @@ def read_config(config_file_path: Path) -> dict[str, Any]:
     return config
 
 
-def migrate_config(config_path: Path, *, dry_run: bool = False) -> dict[str, Any]:
+def migrate_config(config_path: Path, *, dry_run: bool = False) -> dict[str, object]:
     """
     Migrate legacy config values to current format.
 
@@ -1324,7 +1323,7 @@ def write_config(config_file_path: Path) -> None:
     click.echo()
 
     # Prompt the user for configuration values.
-    config: dict[str, Any] = {}
+    config: dict[str, object] = {}
     for field, spec in CONFIG_FIELD_SPECS.items():
         message = spec.prompt
         default = spec.default
@@ -1451,7 +1450,7 @@ def get_validated_input(field, message, current_config, default="", options=None
         return value
 
 
-def _write_config_field(field: str, normalized_value: Any) -> None:
+def _write_config_field(field: str, normalized_value: object) -> None:
     """
     Persist a single, already-normalized config field value.
 
@@ -1465,7 +1464,7 @@ def _write_config_field(field: str, normalized_value: Any) -> None:
     write_config_or_exit(config_file_path, config)
 
 
-def update_config_field(field: str, value: Any) -> None:
+def update_config_field(field: str, value: object) -> None:
     """
     Update a single config field.
 
