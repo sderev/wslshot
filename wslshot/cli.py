@@ -219,7 +219,9 @@ CONFIG_FIELD_SPECS: dict[str, ConfigFieldSpec] = {
 }
 
 
-DEFAULT_CONFIG: dict[str, object] = {field: spec.default for field, spec in CONFIG_FIELD_SPECS.items()}
+DEFAULT_CONFIG: dict[str, object] = {
+    field: spec.default for field, spec in CONFIG_FIELD_SPECS.items()
+}
 
 
 def atomic_write_json(path: Path, data: dict, mode: int = CONFIG_FILE_PERMISSIONS) -> None:
