@@ -105,32 +105,64 @@ class TestReadConfig:
         result = cli.read_config(config_file)
         assert result == config_data
 
-    def test_read_config_with_empty_file_triggers_write(
+    def test_read_config_with_empty_file_non_interactive_replaces_with_defaults(
         self, fake_home: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that empty file (JSONDecodeError) triggers config recreation."""
+        """Test that non-interactive runs recover from JSONDecodeError without prompting."""
         config_file = fake_home / ".config" / "wslshot" / "config.json"
         config_file.write_text("")  # Empty file causes JSONDecodeError
 
-        write_config_called = []
-
-        def mock_write_config(path: Path) -> None:
-            write_config_called.append(path)
-            with open(path, "w", encoding="UTF-8") as f:
-                json.dump({"default_output_format": "markdown"}, f)
-
-        monkeypatch.setattr(cli, "write_config", mock_write_config)
+        monkeypatch.setattr(cli, "_is_interactive_terminal", lambda: False)
+        monkeypatch.setattr(
+            cli, "write_config", lambda _path: pytest.fail("write_config() was called")
+        )
 
         result = cli.read_config(config_file)
-        assert write_config_called == [config_file]
-        assert result == {"default_output_format": "markdown"}
+
+        assert result == cli.DEFAULT_CONFIG
+        assert json.loads(config_file.read_text(encoding="UTF-8")) == cli.DEFAULT_CONFIG
+
+        backup_file = config_file.with_name(f"{config_file.name}.corrupted")
+        assert backup_file.exists()
+        assert backup_file.read_text(encoding="UTF-8") == ""
+
+    def test_read_config_with_existing_corrupted_backup_uses_next_suffix(
+        self, fake_home: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that backups never overwrite existing `.corrupted` files."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+
+        existing_backup = config_file.with_name(f"{config_file.name}.corrupted")
+        existing_backup.write_text("previous backup", encoding="UTF-8")
+
+        corrupted_contents = '{"invalid": json content}'
+        config_file.write_text(corrupted_contents, encoding="UTF-8")
+
+        monkeypatch.setattr(cli, "_is_interactive_terminal", lambda: False)
+        monkeypatch.setattr(
+            cli, "write_config", lambda _path: pytest.fail("write_config() was called")
+        )
+
+        result = cli.read_config(config_file)
+        assert result == cli.DEFAULT_CONFIG
+        assert json.loads(config_file.read_text(encoding="UTF-8")) == cli.DEFAULT_CONFIG
+
+        assert existing_backup.read_text(encoding="UTF-8") == "previous backup"
+
+        backup_file = config_file.with_name(f"{config_file.name}.corrupted.1")
+        assert backup_file.exists()
+        assert backup_file.read_text(encoding="UTF-8") == corrupted_contents
 
     def test_read_config_with_corrupted_json_triggers_write(
         self, fake_home: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Test that corrupted JSON triggers write_config."""
         config_file = fake_home / ".config" / "wslshot" / "config.json"
-        config_file.write_text('{"invalid": json content}')
+        corrupted_contents = '{"invalid": json content}'
+        config_file.write_text(corrupted_contents)
+
+        monkeypatch.setattr(cli, "_is_interactive_terminal", lambda: True)
 
         write_config_called = []
 
@@ -144,6 +176,10 @@ class TestReadConfig:
         result = cli.read_config(config_file)
         assert write_config_called == [config_file]
         assert result == {"recovered": True}
+
+        backup_file = config_file.with_name(f"{config_file.name}.corrupted")
+        assert backup_file.exists()
+        assert backup_file.read_text(encoding="UTF-8") == corrupted_contents
 
 
 class TestWriteConfig:

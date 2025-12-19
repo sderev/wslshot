@@ -224,6 +224,56 @@ DEFAULT_CONFIG: dict[str, object] = {
 }
 
 
+def _is_interactive_terminal() -> bool:
+    """
+    Return True when user interaction (prompting) is expected to work.
+
+    We intentionally keep this conservative: when stdin is not a TTY, prompting for
+    config values will block CI/CD and scripted runs.
+    """
+    try:
+        return bool(getattr(sys.stdin, "isatty", lambda: False)())
+    except Exception:
+        return False
+
+
+def _next_available_backup_path(path: Path, *, suffix: str) -> Path:
+    """
+    Return an available path for a backup file next to `path`.
+
+    Example: `config.json` -> `config.json.corrupted`, then `.corrupted.1`, ...
+    """
+    candidate = path.with_name(f"{path.name}{suffix}")
+    if not candidate.exists():
+        return candidate
+
+    for index in range(1, 1000):
+        candidate = path.with_name(f"{path.name}{suffix}.{index}")
+        if not candidate.exists():
+            return candidate
+
+    raise OSError(f"Too many backup files for {path.name}{suffix}")
+
+
+def _backup_corrupted_file_or_warn(config_file_path: Path) -> None:
+    backup_path: Path | None = None
+    try:
+        backup_path = _next_available_backup_path(config_file_path, suffix=".corrupted")
+        config_file_path.replace(backup_path)
+    except OSError as backup_error:
+        sanitized = sanitize_error_message(
+            str(backup_error),
+            (config_file_path, backup_path) if backup_path is not None else (config_file_path,),
+        )
+        click.echo(
+            click.style(
+                f"Warning: Failed to backup corrupted config: {sanitized}",
+                fg="yellow",
+            ),
+            err=True,
+        )
+
+
 def atomic_write_json(path: Path, data: dict, mode: int = CONFIG_FILE_PERMISSIONS) -> None:
     """
     Write JSON data atomically to prevent corruption.
@@ -1205,7 +1255,8 @@ def read_config(config_file_path: Path) -> dict[str, object]:
     """
     Read the configuration file.
 
-    If the configuration file does not exist, a default configuration file is created.
+    This function expects `config_file_path` to exist. Use `get_config_file_path()` when you
+    want to create a default config file if missing.
 
     Args:
         config_file_path: The path to the configuration file.
@@ -1217,10 +1268,36 @@ def read_config(config_file_path: Path) -> dict[str, object]:
         with open(config_file_path, "r", encoding="UTF-8") as file:
             config = json.load(file)
 
-    except json.JSONDecodeError:
-        write_config(config_file_path)
-        with open(config_file_path, "r", encoding="UTF-8") as file:
-            config = json.load(file)
+    except json.JSONDecodeError as error:
+        if _is_interactive_terminal():
+            click.echo(
+                click.style(
+                    f"Warning: Config file {sanitize_path_for_error(config_file_path)} is corrupted "
+                    f"({error}); recreating it interactively.",
+                    fg="yellow",
+                ),
+                err=True,
+            )
+            _backup_corrupted_file_or_warn(config_file_path)
+            write_config(config_file_path)
+            with open(config_file_path, "r", encoding="UTF-8") as file:
+                config = json.load(file)
+            return config
+
+        click.echo(
+            click.style(
+                f"Warning: Config file {sanitize_path_for_error(config_file_path)} is corrupted "
+                f"({error}); replacing it with defaults (non-interactive run).",
+                fg="yellow",
+            ),
+            err=True,
+        )
+
+        _backup_corrupted_file_or_warn(config_file_path)
+
+        config_file_path.parent.mkdir(parents=True, exist_ok=True, mode=CONFIG_DIR_PERMISSIONS)
+        config = DEFAULT_CONFIG.copy()
+        write_config_or_exit(config_file_path, config)
 
     return config
 
