@@ -41,6 +41,32 @@ class SecurityError(Exception):
     """Security-related error."""
 
 
+# ============================================================================
+# Constants
+# ============================================================================
+
+# File permissions
+CONFIG_FILE_PERMISSIONS = 0o600
+CONFIG_DIR_PERMISSIONS = 0o700
+FILE_PERMISSION_MASK = 0o777
+
+# Output formats
+OUTPUT_FORMAT_MARKDOWN = "markdown"
+OUTPUT_FORMAT_HTML = "html"
+OUTPUT_FORMAT_TEXT = "text"
+DEFAULT_OUTPUT_FORMAT = OUTPUT_FORMAT_MARKDOWN
+VALID_OUTPUT_FORMATS = (OUTPUT_FORMAT_MARKDOWN, OUTPUT_FORMAT_HTML, OUTPUT_FORMAT_TEXT)
+OUTPUT_FORMATS_HELP = ", ".join(VALID_OUTPUT_FORMATS)
+LEGACY_OUTPUT_FORMAT_PLAIN_TEXT = "plain_text"
+
+# Git image directory detection (priority order)
+GIT_IMAGE_DIRECTORY_PRIORITY = (
+    ("img",),
+    ("images",),
+    ("assets", "img"),
+    ("assets", "images"),
+)
+
 # Hard maximum limits (non-bypassable security ceilings)
 # Config values are clamped to these limits to prevent DoS attacks
 HARD_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50MB per file
@@ -55,9 +81,6 @@ MAX_IMAGE_PIXELS = 89_478_485
 PNG_TRAILER = b"\x00\x00\x00\x00IEND\xae\x42\x60\x82"
 JPEG_TRAILER = b"\xff\xd9"
 GIF_TRAILER = b"\x3b"
-
-# Valid output formats
-VALID_OUTPUT_FORMATS = ("markdown", "html", "text")
 
 # Valid conversion target formats (lowercase, without dot)
 VALID_CONVERT_FORMATS = ("png", "jpg", "jpeg", "webp", "gif")
@@ -173,8 +196,8 @@ CONFIG_FIELD_SPECS: dict[str, ConfigFieldSpec] = {
         normalize=normalize_bool,
     ),
     "default_output_format": ConfigFieldSpec(
-        prompt="Enter the default output format (markdown, html, text)",
-        default="markdown",
+        prompt=f"Enter the default output format ({OUTPUT_FORMATS_HELP})",
+        default=DEFAULT_OUTPUT_FORMAT,
         normalize=normalize_output_format,
     ),
     "default_convert_to": ConfigFieldSpec(
@@ -197,7 +220,10 @@ CONFIG_FIELD_SPECS: dict[str, ConfigFieldSpec] = {
 }
 
 
-def atomic_write_json(path: Path, data: dict, mode: int = 0o600) -> None:
+DEFAULT_CONFIG: dict[str, Any] = {field: spec.default for field, spec in CONFIG_FIELD_SPECS.items()}
+
+
+def atomic_write_json(path: Path, data: dict, mode: int = CONFIG_FILE_PERMISSIONS) -> None:
     """
     Write JSON data atomically to prevent corruption.
 
@@ -208,7 +234,7 @@ def atomic_write_json(path: Path, data: dict, mode: int = 0o600) -> None:
     Args:
         path: Path to target file
         data: Dictionary to write as JSON
-        mode: File permissions (default 0o600)
+        mode: File permissions (default CONFIG_FILE_PERMISSIONS)
 
     Raises:
         OSError: If write fails
@@ -252,7 +278,7 @@ def write_config_safely(config_file_path: Path, config_data: dict[str, Any]) -> 
     """
     Write configuration data while enforcing secure permissions.
 
-    Enforces 0o600 permissions before and after writes and rejects symlinked
+    Enforces CONFIG_FILE_PERMISSIONS before and after writes and rejects symlinked
     config paths to prevent privilege escalation via symlink swaps.
 
     Args:
@@ -266,20 +292,20 @@ def write_config_safely(config_file_path: Path, config_data: dict[str, Any]) -> 
         raise SecurityError("Config file is a symlink; refusing to write for safety.")
 
     if config_file_path.exists():
-        current_perms = config_file_path.stat().st_mode & 0o777
-        if current_perms != 0o600:
+        current_perms = config_file_path.stat().st_mode & FILE_PERMISSION_MASK
+        if current_perms != CONFIG_FILE_PERMISSIONS:
             click.echo(
                 f"Warning: Config file had insecure permissions ({oct(current_perms)}). "
-                "Resetting to 0o600.",
+                f"Resetting to {oct(CONFIG_FILE_PERMISSIONS)}.",
                 err=True,
             )
             try:
-                config_file_path.chmod(0o600)
+                config_file_path.chmod(CONFIG_FILE_PERMISSIONS)
             except OSError as error:
                 sanitized = sanitize_error_message(str(error), (config_file_path,))
                 raise SecurityError(f"Failed to set secure permissions: {sanitized}") from error
 
-    atomic_write_json(config_file_path, config_data, mode=0o600)
+    atomic_write_json(config_file_path, config_data, mode=CONFIG_FILE_PERMISSIONS)
 
 
 def write_config_or_exit(config_file_path: Path, config_data: dict[str, Any]) -> None:
@@ -637,7 +663,9 @@ def wslshot():
 @click.option(
     "--output-style",
     "output_format",
-    help=("Specify the output style (markdown, html, text). Overrides the default set in config."),
+    help=(
+        f"Specify the output style ({OUTPUT_FORMATS_HELP}). Overrides the default set in config."
+    ),
 )
 @click.option(
     "--convert-to",
@@ -1124,18 +1152,19 @@ def print_formatted_path(
     - output_format: The output format.
     - screenshots: The screenshot(s).
     """
+    normalized_output_format = output_format.casefold()
     for screenshot in screenshots:
         # Adding a '/' to the screenshot path if the destination is a Git repo.
         # This is because the screenshot path is relative to the git repo's.
         screenshot_path = f"/{screenshot}" if relative_to_repo else str(screenshot)
 
-        if output_format.casefold() == "markdown":
+        if normalized_output_format == OUTPUT_FORMAT_MARKDOWN:
             click.echo(f"![{screenshot.name}]({screenshot_path})")
 
-        elif output_format.casefold() == "html":
+        elif normalized_output_format == OUTPUT_FORMAT_HTML:
             click.echo(f'<img src="{screenshot_path}" alt="{screenshot.name}">')
 
-        elif output_format.casefold() == "text":
+        elif normalized_output_format == OUTPUT_FORMAT_TEXT:
             click.echo(screenshot_path)
 
         else:
@@ -1153,12 +1182,11 @@ def get_config_file_path(*, create_if_missing: bool = True) -> Path:
         raise SecurityError("Config file is a symlink; refusing to use it.")
 
     if create_if_missing:
-        config_file_path.parent.mkdir(parents=True, exist_ok=True)
+        config_file_path.parent.mkdir(parents=True, exist_ok=True, mode=CONFIG_DIR_PERMISSIONS)
 
         if not config_file_path.exists():
             # Write default config without interactive prompts
-            default_config = {field: spec.default for field, spec in CONFIG_FIELD_SPECS.items()}
-            write_config_safely(config_file_path, default_config)
+            write_config_safely(config_file_path, DEFAULT_CONFIG.copy())
 
     return config_file_path
 
@@ -1247,8 +1275,11 @@ def migrate_config(config_path: Path, *, dry_run: bool = False) -> dict[str, Any
 
     # Migration: plain_text → text
     default_output_format = config.get("default_output_format")
-    if isinstance(default_output_format, str) and default_output_format.casefold() == "plain_text":
-        config["default_output_format"] = "text"
+    if (
+        isinstance(default_output_format, str)
+        and default_output_format.casefold() == LEGACY_OUTPUT_FORMAT_PLAIN_TEXT
+    ):
+        config["default_output_format"] = OUTPUT_FORMAT_TEXT
         changes.append("default_output_format: 'plain_text' → 'text'")
 
     # Write migrated config
@@ -1576,18 +1607,13 @@ def get_git_repo_img_destination() -> Path:
     except RuntimeError as error:
         sys.exit(str(error))
 
-    if (git_root / "img").exists():
-        destination = git_root / "img"
-    elif (git_root / "images").exists():
-        destination = git_root / "images"
-    elif (git_root / "assets" / "img").exists():
-        destination = git_root / "assets" / "img"
-    elif (git_root / "assets" / "images").exists():
-        destination = git_root / "assets" / "images"
-    else:
-        destination = git_root / "assets" / "images"
-        destination.mkdir(parents=True, exist_ok=True)
+    for relative_parts in GIT_IMAGE_DIRECTORY_PRIORITY:
+        candidate = git_root.joinpath(*relative_parts)
+        if candidate.exists():
+            return candidate
 
+    destination = git_root.joinpath(*GIT_IMAGE_DIRECTORY_PRIORITY[-1])
+    destination.mkdir(parents=True, exist_ok=True)
     return destination
 
 
@@ -1650,7 +1676,7 @@ def set_default_convert_to(convert_format: str | None) -> None:
 @click.option(
     "--output-style",
     "output_format",
-    help="Set the default output style (markdown, html, text).",
+    help=f"Set the default output style ({OUTPUT_FORMATS_HELP}).",
 )
 @click.option(
     "--convert-to",
@@ -1668,7 +1694,7 @@ def configure(source, destination, auto_stage_enabled, output_format, convert_to
 
     - Control whether screenshots are automatically staged with --auto-stage.
 
-    - Set the default output style (markdown, html, text) with --output-style.
+    - Set the default output style with --output-style.
 
     ___
 
