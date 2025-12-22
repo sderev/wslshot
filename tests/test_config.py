@@ -240,6 +240,7 @@ class TestWriteConfig:
 
         # Mock click.echo to suppress output (can be called with or without msg)
         monkeypatch.setattr("click.echo", lambda msg=None, **kwargs: None)
+        monkeypatch.setattr("click.secho", lambda msg=None, **kwargs: None)
 
         cli.write_config(config_file)
 
@@ -311,6 +312,7 @@ class TestWriteConfig:
         monkeypatch.setattr(cli, "get_validated_input", mock_get_validated_input)
         monkeypatch.setattr(cli, "get_config_input", mock_get_config_input)
         monkeypatch.setattr("click.echo", lambda msg=None, **kwargs: None)
+        monkeypatch.setattr("click.secho", lambda msg=None, **kwargs: None)
 
         cli.write_config(config_file)
 
@@ -342,6 +344,7 @@ class TestWriteConfig:
         monkeypatch.setattr(cli, "get_validated_input", lambda *args, **kwargs: "markdown")
         monkeypatch.setattr(cli, "get_config_input", lambda *args, **kwargs: "")
         monkeypatch.setattr("click.echo", lambda msg=None, **kwargs: None)
+        monkeypatch.setattr("click.secho", lambda msg=None, **kwargs: None)
 
         cli.write_config(config_file)
 
@@ -500,6 +503,12 @@ class TestSetDefaultSource:
             if msg and kwargs.get("err")
             else None,
         )
+        monkeypatch.setattr(
+            "click.secho",
+            lambda msg=None, **kwargs: error_messages.append(msg)
+            if msg and kwargs.get("err")
+            else None,
+        )
 
         invalid_dir = tmp_path / "nonexistent"
 
@@ -603,6 +612,12 @@ class TestSetDefaultDestination:
         error_messages: list[str] = []
         monkeypatch.setattr(
             "click.echo",
+            lambda msg=None, **kwargs: error_messages.append(msg)
+            if msg and kwargs.get("err")
+            else None,
+        )
+        monkeypatch.setattr(
+            "click.secho",
             lambda msg=None, **kwargs: error_messages.append(msg)
             if msg and kwargs.get("err")
             else None,
@@ -766,6 +781,12 @@ class TestSetDefaultOutputFormat:
             if msg and kwargs.get("err")
             else None,
         )
+        monkeypatch.setattr(
+            "click.secho",
+            lambda msg=None, **kwargs: error_messages.append(msg)
+            if msg and kwargs.get("err")
+            else None,
+        )
 
         with pytest.raises(SystemExit):
             cli.set_default_output_format("invalid_format")
@@ -811,6 +832,12 @@ class TestSetDefaultConvertTo:
         error_messages: list[str] = []
         monkeypatch.setattr(
             "click.echo",
+            lambda msg=None, **kwargs: error_messages.append(msg)
+            if msg and kwargs.get("err")
+            else None,
+        )
+        monkeypatch.setattr(
+            "click.secho",
             lambda msg=None, **kwargs: error_messages.append(msg)
             if msg and kwargs.get("err")
             else None,
@@ -958,6 +985,7 @@ class TestGetValidatedDirectoryInput:
 
         monkeypatch.setattr(cli, "get_config_input", mock_get_config_input)
         monkeypatch.setattr("click.echo", lambda msg=None, **kwargs: None)
+        monkeypatch.setattr("click.secho", lambda msg=None, **kwargs: None)
 
         result = cli.get_validated_directory_input(
             "test_field", "Enter directory", current_config, ""
@@ -991,6 +1019,12 @@ class TestGetValidatedDirectoryInput:
             if msg and kwargs.get("err")
             else None,
         )
+        monkeypatch.setattr(
+            "click.secho",
+            lambda msg=None, **kwargs: error_messages.append(msg)
+            if msg and kwargs.get("err")
+            else None,
+        )
 
         result = cli.get_validated_directory_input("test_field", "Enter directory", {}, "")
 
@@ -1010,6 +1044,7 @@ class TestGetValidatedDirectoryInput:
 
         monkeypatch.setattr(cli, "get_config_input", mock_get_config_input)
         monkeypatch.setattr("click.echo", lambda msg=None, **kwargs: None)
+        monkeypatch.setattr("click.secho", lambda msg=None, **kwargs: None)
 
         result = cli.get_validated_directory_input(
             "test_field", "Enter directory", {}, "default_value"
@@ -1056,6 +1091,7 @@ class TestGetValidatedInput:
         monkeypatch.setattr("click.prompt", mock_prompt)
         monkeypatch.setattr("click.style", lambda text, **kwargs: text)
         monkeypatch.setattr("click.echo", lambda msg, **kwargs: error_messages.append(msg))
+        monkeypatch.setattr("click.secho", lambda msg, **kwargs: error_messages.append(msg))
 
         result = cli.get_validated_input(
             "format", "Enter format", current_config, "html", options=["markdown", "html"]

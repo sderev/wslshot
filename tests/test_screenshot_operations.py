@@ -281,11 +281,12 @@ def test_get_screenshots_raises_error_when_no_screenshots_found(
     # Mock click.echo to capture error messages
     error_messages = []
 
-    def mock_echo(msg, err=False):
-        if err:
+    def mock_echo(msg=None, err=False, **kwargs):
+        if err and msg is not None:
             error_messages.append(msg)
 
     monkeypatch.setattr(cli.click, "echo", mock_echo)
+    monkeypatch.setattr(cli.click, "secho", mock_echo)
 
     # Test that it raises SystemExit
     with pytest.raises(SystemExit):
@@ -319,11 +320,12 @@ def test_get_screenshots_raises_error_when_count_exceeds_available(
     # Mock click.echo to capture error messages
     error_messages = []
 
-    def mock_echo(msg, err=False):
-        if err:
+    def mock_echo(msg=None, err=False, **kwargs):
+        if err and msg is not None:
             error_messages.append(msg)
 
     monkeypatch.setattr(cli.click, "echo", mock_echo)
+    monkeypatch.setattr(cli.click, "secho", mock_echo)
 
     # Try to get 5 screenshots when only 2 exist
     with pytest.raises(SystemExit):

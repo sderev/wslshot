@@ -367,8 +367,9 @@ def write_config_or_exit(config_file_path: Path, config_data: dict[str, object])
         write_config_safely(config_file_path, config_data)
     except (FileNotFoundError, SecurityError, OSError) as error:
         sanitized_error = format_path_error(error)
-        click.echo(
-            click.style(f"Error: Failed to write config file: {sanitized_error}", fg="red"),
+        click.secho(
+            f"Error: Failed to write config file: {sanitized_error}",
+            fg="red",
             err=True,
         )
         sys.exit(1)
@@ -759,11 +760,9 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
         click.echo("Hint: If you trust this path, rerun with `--allow-symlinks`.", err=True)
         sys.exit(1)
     except FileNotFoundError:
-        click.echo(
-            click.style(
-                f"Error: Source directory not found: {sanitize_path_for_error(source)}",
-                fg="red",
-            ),
+        click.secho(
+            f"Error: Source directory not found: {sanitize_path_for_error(source)}",
+            fg="red",
             err=True,
         )
         click.echo("Hint: Set `--source` or run `wslshot configure`.", err=True)
@@ -781,11 +780,9 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
         click.echo("Hint: If you trust this path, rerun with `--allow-symlinks`.", err=True)
         sys.exit(1)
     except FileNotFoundError:
-        click.echo(
-            click.style(
-                f"Error: Destination directory not found: {sanitize_path_for_error(destination)}",
-                fg="red",
-            ),
+        click.secho(
+            f"Error: Destination directory not found: {sanitize_path_for_error(destination)}",
+            fg="red",
             err=True,
         )
         click.echo("Hint: Set `--destination` or run `wslshot configure`.", err=True)
@@ -796,10 +793,7 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
         output_format = config["default_output_format"]
 
     if output_format.casefold() not in VALID_OUTPUT_FORMATS:
-        click.echo(
-            click.style(f"Error: Invalid `--output-style`: {output_format}", fg="red"),
-            err=True,
-        )
+        click.secho(f"Error: Invalid `--output-style`: {output_format}", fg="red", err=True)
         valid_options = ", ".join(VALID_OUTPUT_FORMATS)
         suggestion = suggest_format(output_format, list(VALID_OUTPUT_FORMATS))
         hint = f"Hint: Use one of: {valid_options}."
@@ -831,16 +825,14 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
                         err=True,
                     )
             else:
-                click.echo(click.style(f"Error: {sanitized_error}", fg="red"), err=True)
+                click.secho(f"Error: {sanitized_error}", fg="red", err=True)
 
             click.echo(f"Source file: {sanitize_path_for_error(image_path)}", err=True)
             sys.exit(1)
         except FileNotFoundError:
-            click.echo(
-                click.style(
-                    f"Error: Image file not found: {sanitize_path_for_error(image_path)}",
-                    fg="red",
-                ),
+            click.secho(
+                f"Error: Image file not found: {sanitize_path_for_error(image_path)}",
+                fg="red",
                 err=True,
             )
             click.echo("Hint: Check the path and try again.", err=True)
@@ -855,7 +847,7 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
                 max_total_size_bytes=max_total_size_bytes,
             )
         except ValueError as error:
-            click.echo(click.style(f"Error: {error}", fg="red"), err=True)
+            click.secho(f"Error: {error}", fg="red", err=True)
             sys.exit(1)
     else:
         # Copy the screenshot(s) to the destination directory.
@@ -868,7 +860,7 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
                 max_total_size_bytes=max_total_size_bytes,
             )
         except ValueError as error:
-            click.echo(click.style(f"Error: {error}", fg="red"), err=True)
+            click.secho(f"Error: {error}", fg="red", err=True)
             sys.exit(1)
 
     # Convert images if --convert-to option is provided
@@ -880,7 +872,7 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
                 converted_screenshots += (converted_path,)
             except ValueError as error:
                 sanitized_error = sanitize_error_message(str(error), (screenshot,))
-                click.echo(click.style(f"Error: {sanitized_error}", fg="red"), err=True)
+                click.secho(f"Error: {sanitized_error}", fg="red", err=True)
                 sys.exit(1)
         copied_screenshots = converted_screenshots
 
@@ -891,7 +883,7 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
         try:
             git_root = get_git_root()
         except RuntimeError as error:
-            click.echo(click.style(f"Error: {error}", fg="red"), err=True)
+            click.secho(f"Error: {error}", fg="red", err=True)
         else:
             relative_screenshots = format_screenshots_path_for_git(copied_screenshots, git_root)
 
@@ -957,33 +949,26 @@ def get_screenshots(
         sanitized_source = sanitize_path_for_error(source)
 
         if len(screenshots) == 0:
-            click.echo(
-                click.style(
-                    f"Error: No screenshots found in {sanitized_source}",
-                    fg="red",
-                ),
+            click.secho(
+                f"Error: No screenshots found in {sanitized_source}",
+                fg="red",
                 err=True,
             )
             click.echo("Hint: Set `--source` or run `wslshot configure`.", err=True)
             sys.exit(1)
 
         if len(screenshots) < count:
-            click.echo(
-                click.style(
-                    f"Error: Only {len(screenshots)} screenshot(s) found in {sanitized_source}, "
-                    f"but you asked for {count}.",
-                    fg="red",
-                ),
+            click.secho(
+                f"Error: Only {len(screenshots)} screenshot(s) found in {sanitized_source}, "
+                f"but you asked for {count}.",
+                fg="red",
                 err=True,
             )
             click.echo("Hint: Lower `--count` or check the source directory.", err=True)
             sys.exit(1)
     except OSError as error:
         sanitized_error = format_path_error(error)
-        click.echo(
-            click.style(f"Error: {sanitized_error}", fg="red"),
-            err=True,
-        )
+        click.secho(f"Error: {sanitized_error}", fg="red", err=True)
         click.echo(f"Source directory: {sanitize_path_for_error(source)}", err=True)
         sys.exit(1)
 
@@ -1415,9 +1400,9 @@ def write_config(config_file_path: Path) -> None:
         current_config = {}
 
     if current_config:
-        click.echo(click.style("Updating config file...", fg="yellow"))
+        click.secho("Updating config file...", fg="yellow")
     else:
-        click.echo(click.style("Creating config file...", fg="yellow"))
+        click.secho("Creating config file...", fg="yellow")
     click.echo()
 
     # Prompt the user for configuration values.
@@ -1453,7 +1438,7 @@ def write_config(config_file_path: Path) -> None:
                 try:
                     config[field] = spec.normalize(value)
                 except ValueError as error:
-                    click.echo(click.style(f"Error: {error}", fg="red"), err=True)
+                    click.secho(f"Error: {error}", fg="red", err=True)
                     click.echo()
                     continue
                 break
@@ -1474,9 +1459,9 @@ def write_config(config_file_path: Path) -> None:
     write_config_or_exit(config_file_path, config)
 
     if current_config:
-        click.echo(click.style("Configuration saved.", fg="green"))
+        click.secho("Configuration saved.", fg="green")
     else:
-        click.echo(click.style("Configuration file created.", fg="green"))
+        click.secho("Configuration file created.", fg="green")
 
 
 def get_config_input(field, message, current_config, default="") -> str:
@@ -1514,11 +1499,9 @@ def get_validated_directory_input(field, message, current_config, default) -> st
             click.echo(f"{SECURITY_ERROR_PREFIX} {sanitized_msg}", err=True)
         except FileNotFoundError as error:
             sanitized_msg = format_path_error(error)
-            click.echo(
-                click.style(
-                    f"Error: Invalid {field.replace('_', ' ')}: {sanitized_msg}",
-                    fg="red",
-                ),
+            click.secho(
+                f"Error: Invalid {field.replace('_', ' ')}: {sanitized_msg}",
+                fg="red",
                 err=True,
             )
         finally:
@@ -1537,12 +1520,10 @@ def get_validated_input(field, message, current_config, default="", options=None
         )
 
         if options and value.lower() not in options:
-            click.echo(
-                click.style(
-                    f"Error: Invalid value for {field.replace('_', ' ')}. "
-                    f"Use one of: {', '.join(options)}.",
-                    fg="red",
-                ),
+            click.secho(
+                f"Error: Invalid value for {field.replace('_', ' ')}. "
+                f"Use one of: {', '.join(options)}.",
+                fg="red",
                 err=True,
             )
             continue
@@ -1609,10 +1590,7 @@ def set_default_source(source_str: str) -> None:
             sys.exit(1)
         except FileNotFoundError as error:
             sanitized_msg = format_path_error(error)
-            click.echo(
-                click.style(f"Error: Invalid source directory: {sanitized_msg}", fg="red"),
-                err=True,
-            )
+            click.secho(f"Error: Invalid source directory: {sanitized_msg}", fg="red", err=True)
             sys.exit(1)
 
     _write_config_field("default_source", source)
@@ -1636,11 +1614,9 @@ def set_default_destination(destination_str: str) -> None:
             sys.exit(1)
         except FileNotFoundError as error:
             sanitized_msg = format_path_error(error)
-            click.echo(
-                click.style(
-                    f"Error: Invalid destination directory: {sanitized_msg}",
-                    fg="red",
-                ),
+            click.secho(
+                f"Error: Invalid destination directory: {sanitized_msg}",
+                fg="red",
                 err=True,
             )
             sys.exit(1)
@@ -1712,7 +1688,7 @@ def get_git_repo_img_destination() -> Path:
     try:
         git_root = get_git_root()
     except RuntimeError as error:
-        click.echo(click.style(f"Error: {error}", fg="red"), err=True)
+        click.secho(f"Error: {error}", fg="red", err=True)
         sys.exit(1)
 
     for relative_parts in GIT_IMAGE_DIRECTORY_PRIORITY:
@@ -1743,10 +1719,7 @@ def set_default_output_format(output_format: str) -> None:
         output_format: The default output format.
     """
     if output_format.casefold() not in VALID_OUTPUT_FORMATS:
-        click.echo(
-            click.style(f"Error: Invalid `--output-style`: {output_format}", fg="red"),
-            err=True,
-        )
+        click.secho(f"Error: Invalid `--output-style`: {output_format}", fg="red", err=True)
         valid_options = ", ".join(VALID_OUTPUT_FORMATS)
         suggestion = suggest_format(output_format, list(VALID_OUTPUT_FORMATS))
         hint = f"Hint: Use one of: {valid_options}."
@@ -1768,7 +1741,7 @@ def set_default_convert_to(convert_format: str | None) -> None:
     try:
         normalized_convert_format = normalize_default_convert_to(convert_format)
     except (TypeError, ValueError) as error:
-        click.echo(click.style(f"Error: {error}", fg="red"), err=True)
+        click.secho(f"Error: {error}", fg="red", err=True)
         sys.exit(1)
 
     _write_config_field("default_convert_to", normalized_convert_format)
@@ -1850,10 +1823,7 @@ def migrate_config_cmd(dry_run):
     config_path = get_config_file_path_or_exit(create_if_missing=False)
 
     if not config_path.exists():
-        click.echo(
-            click.style("Nothing to migrate: config file not found.", fg="yellow"),
-            err=True,
-        )
+        click.secho("Nothing to migrate: config file not found.", fg="yellow", err=True)
         click.echo("Hint: Create one with `wslshot configure`.", err=True)
         sys.exit(0)
 
@@ -1863,21 +1833,18 @@ def migrate_config_cmd(dry_run):
     result = migrate_config(config_path, dry_run=dry_run)
 
     if "error" in result:
-        click.echo(
-            click.style(f"Error: {result['error']}", fg="red"),
-            err=True,
-        )
+        click.secho(f"Error: {result['error']}", fg="red", err=True)
         sys.exit(1)
 
     if not result["changes"]:
-        click.echo(click.style("Config is up to date. No migration needed.", fg="green"))
+        click.secho("Config is up to date. No migration needed.", fg="green")
         sys.exit(0)
 
     # Show changes
     if dry_run:
-        click.echo(click.style("Would change:", fg="yellow"))
+        click.secho("Would change:", fg="yellow")
     else:
-        click.echo(click.style("Changed:", fg="green"))
+        click.secho("Changed:", fg="green")
 
     for change in result["changes"]:
         click.echo(f"  - {change}")
@@ -1887,4 +1854,4 @@ def migrate_config_cmd(dry_run):
         click.echo("Hint: Re-run without `--dry-run` to apply these changes.")
     else:
         click.echo()
-        click.echo(click.style("Migration complete.", fg="green"))
+        click.secho("Migration complete.", fg="green")
