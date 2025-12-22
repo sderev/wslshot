@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -115,7 +116,7 @@ def test_fetch_with_default_settings(
     )
 
     assert result.exit_code == 0
-    assert "![screenshot_" in result.output
+    assert re.search(r"!\[[0-9a-f]{32}\.png\]\(", result.output)
     assert str(dest_dir) in result.output
 
 
@@ -136,7 +137,7 @@ def test_fetch_with_custom_source(
     )
 
     assert result.exit_code == 0
-    assert "![screenshot_" in result.output
+    assert re.search(r"!\[[0-9a-f]{32}\.png\]\(", result.output)
 
 
 def test_fetch_with_custom_destination(
@@ -210,7 +211,7 @@ def test_fetch_with_output_format_markdown(
     )
 
     assert result.exit_code == 0
-    assert "![screenshot_" in result.output
+    assert re.search(r"!\[[0-9a-f]{32}\.png\]\(", result.output)
     assert "](" in result.output
 
 
@@ -240,7 +241,7 @@ def test_fetch_with_output_format_html(
 
     assert result.exit_code == 0
     assert '<img src="' in result.output
-    assert 'alt="screenshot_' in result.output
+    assert re.search(r'alt="[0-9a-f]{32}\.png"', result.output)
 
 
 def test_fetch_with_output_format_plain_text(
@@ -300,7 +301,7 @@ def test_fetch_with_output_style_markdown(
     )
 
     assert result.exit_code == 0
-    assert "![screenshot_" in result.output
+    assert re.search(r"!\[[0-9a-f]{32}\.png\]\(", result.output)
     assert "](" in result.output
 
 
@@ -330,7 +331,7 @@ def test_fetch_with_output_style_html(
 
     assert result.exit_code == 0
     assert '<img src="' in result.output
-    assert 'alt="screenshot_' in result.output
+    assert re.search(r'alt="[0-9a-f]{32}\.png"', result.output)
 
 
 def test_fetch_with_output_style_text(
@@ -473,7 +474,7 @@ def test_fetch_with_direct_png_path(
     )
 
     assert result.exit_code == 0
-    assert "![screenshot_" in result.output
+    assert re.search(r"!\[[0-9a-f]{32}\.png\]\(", result.output)
 
 
 def test_fetch_with_direct_jpg_path(
@@ -493,7 +494,7 @@ def test_fetch_with_direct_jpg_path(
     )
 
     assert result.exit_code == 0
-    assert "![screenshot_" in result.output
+    assert re.search(r"!\[[0-9a-f]{32}\.jpg\]\(", result.output)
 
 
 def test_fetch_with_direct_gif_path(
@@ -513,8 +514,7 @@ def test_fetch_with_direct_gif_path(
     )
 
     assert result.exit_code == 0
-    # GIF files should use 'animated_' prefix
-    assert "![animated_" in result.output
+    assert re.search(r"!\[[0-9a-f]{32}\.gif\]\(", result.output)
 
 
 def test_fetch_with_direct_jpeg_path(
@@ -534,7 +534,7 @@ def test_fetch_with_direct_jpeg_path(
     )
 
     assert result.exit_code == 0
-    assert "![screenshot_" in result.output
+    assert re.search(r"!\[[0-9a-f]{32}\.jpeg\]\(", result.output)
 
 
 def test_fetch_rejects_txt_file(
@@ -1056,7 +1056,7 @@ def test_fetch_uses_relative_paths_when_in_git_repo(
 
     assert result.exit_code == 0
     # Relative paths should start with / when in git repo
-    assert "](/images/screenshot_" in result.output or "](/images/animated_" in result.output
+    assert re.search(r"\]\(/images/[0-9a-f]{32}\.png\)", result.output)
 
 
 def test_fetch_uses_absolute_paths_when_not_in_git_repo(
@@ -1193,7 +1193,7 @@ def test_fetch_fetches_most_recent_screenshot(
 
     assert result.exit_code == 0
     # Should copy exactly one file (the most recent)
-    copied_files = list(dest_dir.glob("screenshot_*.png"))
+    copied_files = list(dest_dir.glob("*.png"))
     assert len(copied_files) == 1
 
 
@@ -1219,7 +1219,7 @@ def test_fetch_fetches_n_most_recent_when_count_n(
 
     assert result.exit_code == 0
     # Should copy exactly 3 files
-    copied_files = list(dest_dir.glob("screenshot_*.png"))
+    copied_files = list(dest_dir.glob("*.png"))
     assert len(copied_files) == 3
 
 
@@ -1288,7 +1288,7 @@ def test_fetch_stdout_contains_formatted_path(
 
     assert result.exit_code == 0
     assert result.output.strip()  # Should have output
-    assert "screenshot_" in result.output
+    assert re.search(r"[0-9a-f]{32}\.png", result.output)
 
 
 def test_fetch_markdown_format_in_output(
@@ -1316,7 +1316,7 @@ def test_fetch_markdown_format_in_output(
     )
 
     assert result.exit_code == 0
-    assert result.output.startswith("![screenshot_")
+    assert re.match(r"!\[[0-9a-f]{32}\.png\]\(", result.output)
     assert "](" in result.output
 
 
@@ -1346,7 +1346,7 @@ def test_fetch_html_format_in_output(
 
     assert result.exit_code == 0
     assert result.output.startswith("<img src=")
-    assert 'alt="screenshot_' in result.output
+    assert re.search(r'alt="[0-9a-f]{32}\.png"', result.output)
 
 
 def test_fetch_plain_text_format_in_output(
@@ -1686,7 +1686,7 @@ def test_fetch_convert_to_output_path_correct(
     assert result.exit_code == 0
     # Output should show .jpg extension, not .png
     assert ".jpg" in result.output
-    assert "screenshot_" in result.output
+    assert re.search(r"[0-9a-f]{32}\.jpg", result.output)
 
 
 def test_fetch_convert_to_no_conversion_when_same_format(

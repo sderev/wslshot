@@ -378,7 +378,7 @@ def test_copy_screenshots_generates_unique_uuid_filenames(
     result = cli.copy_screenshots((screenshot,), destination)
 
     assert len(result) == 1
-    assert result[0].name == f"screenshot_{fake_uuid.hex}.png"
+    assert result[0].name == f"{fake_uuid.hex}.png"
 
 
 def test_copy_screenshots_preserves_file_extensions(
@@ -440,7 +440,7 @@ def test_copy_screenshots_handles_multiple_files(
     for i, copied_path in enumerate(result):
         assert copied_path.exists()
         assert copied_path.parent == destination
-        assert copied_path.name == f"screenshot_{uuids[i].hex}.png"
+        assert copied_path.name == f"{uuids[i].hex}.png"
 
 
 def test_copy_screenshots_returns_tuple_of_path_objects(tmp_path: Path) -> None:
@@ -560,51 +560,51 @@ def test_copy_screenshots_respects_disabled_aggregate_cap(tmp_path: Path, capsys
 
 
 def test_generate_screenshot_name_with_png(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that generate_screenshot_name with .png generates 'screenshot_<uuid>.png'."""
+    """Test that generate_screenshot_name with .png generates '<uuid>.png'."""
     fake_uuid = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
     monkeypatch.setattr(cli.uuid, "uuid4", lambda: fake_uuid)
 
     screenshot_path = Path("/tmp/image.png")
     result = cli.generate_screenshot_name(screenshot_path)
 
-    assert result == f"screenshot_{fake_uuid.hex}.png"
+    assert result == f"{fake_uuid.hex}.png"
 
 
 def test_generate_screenshot_name_with_jpg(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that generate_screenshot_name with .jpg generates 'screenshot_<uuid>.jpg'."""
+    """Test that generate_screenshot_name with .jpg generates '<uuid>.jpg'."""
     fake_uuid = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
     monkeypatch.setattr(cli.uuid, "uuid4", lambda: fake_uuid)
 
     screenshot_path = Path("/tmp/photo.jpg")
     result = cli.generate_screenshot_name(screenshot_path)
 
-    assert result == f"screenshot_{fake_uuid.hex}.jpg"
+    assert result == f"{fake_uuid.hex}.jpg"
 
 
 def test_generate_screenshot_name_with_jpeg(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that generate_screenshot_name with .jpeg generates 'screenshot_<uuid>.jpeg'."""
+    """Test that generate_screenshot_name with .jpeg generates '<uuid>.jpeg'."""
     fake_uuid = UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
     monkeypatch.setattr(cli.uuid, "uuid4", lambda: fake_uuid)
 
     screenshot_path = Path("/tmp/image.jpeg")
     result = cli.generate_screenshot_name(screenshot_path)
 
-    assert result == f"screenshot_{fake_uuid.hex}.jpeg"
+    assert result == f"{fake_uuid.hex}.jpeg"
 
 
 def test_generate_screenshot_name_with_gif(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that generate_screenshot_name with .gif generates 'animated_<uuid>.gif'."""
+    """Test that generate_screenshot_name with .gif generates '<uuid>.gif'."""
     fake_uuid = UUID("dddddddd-dddd-dddd-dddd-dddddddddddd")
     monkeypatch.setattr(cli.uuid, "uuid4", lambda: fake_uuid)
 
     screenshot_path = Path("/tmp/animation.gif")
     result = cli.generate_screenshot_name(screenshot_path)
 
-    assert result == f"animated_{fake_uuid.hex}.gif"
+    assert result == f"{fake_uuid.hex}.gif"
 
 
 def test_generate_screenshot_name_with_uppercase_gif(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that generate_screenshot_name with .GIF (uppercase) generates 'animated_<uuid>.gif'."""
+    """Test that generate_screenshot_name with .GIF (uppercase) generates '<uuid>.gif'."""
     fake_uuid = UUID("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")
     monkeypatch.setattr(cli.uuid, "uuid4", lambda: fake_uuid)
 
@@ -612,7 +612,7 @@ def test_generate_screenshot_name_with_uppercase_gif(monkeypatch: pytest.MonkeyP
     result = cli.generate_screenshot_name(screenshot_path)
 
     # Extension should be lowercased in output
-    assert result == f"animated_{fake_uuid.hex}.gif"
+    assert result == f"{fake_uuid.hex}.gif"
 
 
 def test_generate_screenshot_name_lowercases_extension(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -622,10 +622,10 @@ def test_generate_screenshot_name_lowercases_extension(monkeypatch: pytest.Monke
 
     # Test with various uppercase/mixed case extensions
     test_cases = [
-        (Path("/tmp/image.PNG"), f"screenshot_{fake_uuid.hex}.png"),
-        (Path("/tmp/photo.JPG"), f"screenshot_{fake_uuid.hex}.jpg"),
-        (Path("/tmp/image.JPEG"), f"screenshot_{fake_uuid.hex}.jpeg"),
-        (Path("/tmp/anim.GIF"), f"animated_{fake_uuid.hex}.gif"),
+        (Path("/tmp/image.PNG"), f"{fake_uuid.hex}.png"),
+        (Path("/tmp/photo.JPG"), f"{fake_uuid.hex}.jpg"),
+        (Path("/tmp/image.JPEG"), f"{fake_uuid.hex}.jpeg"),
+        (Path("/tmp/anim.GIF"), f"{fake_uuid.hex}.gif"),
     ]
 
     for input_path, expected_name in test_cases:

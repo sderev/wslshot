@@ -1063,10 +1063,7 @@ def generate_screenshot_name(screenshot_path: Path) -> str:
     suffix = screenshot_path.suffix.lower()
     unique_fragment = uuid.uuid4().hex
 
-    if suffix == ".gif":
-        return f"animated_{unique_fragment}{suffix}"
-
-    return f"screenshot_{unique_fragment}{suffix}"
+    return f"{unique_fragment}{suffix}"
 
 
 def convert_image_format(source_path: Path, target_format: str) -> Path:

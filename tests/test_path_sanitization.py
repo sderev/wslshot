@@ -7,6 +7,7 @@ to prevent information disclosure attacks.
 
 import ast
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -280,7 +281,7 @@ class TestFetchErrorMessages:
         assert str(source) not in result.output
         assert str(destination) not in result.output
         assert str(image_path) not in result.output
-        assert "<...>/screenshot_" in result.output
+        assert re.search(r"<\.\.\.>/[0-9a-f]{32}\.png", result.output)
         assert "secret.png" not in result.output
 
     def test_unreadable_source_directory_masks_real_path(
@@ -350,7 +351,7 @@ class TestFetchErrorMessages:
         assert result.exit_code == 1
         assert "Could not copy" in result.output
         assert "<...>/secret.png" in result.output
-        assert "<...>/screenshot_" in result.output
+        assert re.search(r"<\.\.\.>/[0-9a-f]{32}\.png", result.output)
         assert str(source) not in result.output
         assert str(destination) not in result.output
         assert str(image_path) not in result.output

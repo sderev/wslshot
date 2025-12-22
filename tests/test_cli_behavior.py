@@ -16,7 +16,7 @@ def test_generate_screenshot_name_uses_uuid(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(cli.uuid, "uuid4", lambda: fake_uuid)
 
     image_path = Path("/tmp/source/screenshot.png")
-    assert cli.generate_screenshot_name(image_path) == f"screenshot_{fake_uuid.hex}.png"
+    assert cli.generate_screenshot_name(image_path) == f"{fake_uuid.hex}.png"
 
 
 def test_generate_screenshot_name_for_gif(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -24,7 +24,7 @@ def test_generate_screenshot_name_for_gif(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(cli.uuid, "uuid4", lambda: fake_uuid)
 
     gif_path = Path("/tmp/source/animation.gif")
-    assert cli.generate_screenshot_name(gif_path) == f"animated_{fake_uuid.hex}.gif"
+    assert cli.generate_screenshot_name(gif_path) == f"{fake_uuid.hex}.gif"
 
 
 def test_format_screenshots_path_for_git_skips_external_paths(tmp_path: Path) -> None:
@@ -147,7 +147,7 @@ def test_generate_screenshot_name_uppercase_jpg(monkeypatch: pytest.MonkeyPatch)
     image_path = Path("/tmp/source/Screenshot.JPG")
     result = cli.generate_screenshot_name(image_path)
 
-    assert result == f"screenshot_{fake_uuid.hex}.jpg"
+    assert result == f"{fake_uuid.hex}.jpg"
     assert result.endswith(".jpg")  # Verify lowercase
 
 
@@ -159,7 +159,7 @@ def test_generate_screenshot_name_uppercase_jpeg(monkeypatch: pytest.MonkeyPatch
     image_path = Path("/tmp/source/Photo.JPEG")
     result = cli.generate_screenshot_name(image_path)
 
-    assert result == f"screenshot_{fake_uuid.hex}.jpeg"
+    assert result == f"{fake_uuid.hex}.jpeg"
     assert result.endswith(".jpeg")
 
 
@@ -171,7 +171,7 @@ def test_generate_screenshot_name_mixed_case_png(monkeypatch: pytest.MonkeyPatch
     image_path = Path("/tmp/source/Image.PnG")
     result = cli.generate_screenshot_name(image_path)
 
-    assert result == f"screenshot_{fake_uuid.hex}.png"
+    assert result == f"{fake_uuid.hex}.png"
     assert result.endswith(".png")
 
 
