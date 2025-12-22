@@ -20,7 +20,7 @@ def test_migrate_config_updates_plain_text(fake_home: Path) -> None:
     result = cli.migrate_config(config_path)
 
     assert result["migrated"] is True
-    assert "default_output_format: 'plain_text' → 'text'" in result["changes"]
+    assert "default_output_format: 'plain_text' becomes 'text'" in result["changes"]
     updated = json.loads(config_path.read_text())
     assert updated["default_output_format"] == "text"
 
@@ -32,7 +32,7 @@ def test_migrate_config_updates_plain_text_case_insensitive(fake_home: Path) -> 
     result = cli.migrate_config(config_path)
 
     assert result["migrated"] is True
-    assert "default_output_format: 'plain_text' → 'text'" in result["changes"]
+    assert "default_output_format: 'plain_text' becomes 'text'" in result["changes"]
     updated = json.loads(config_path.read_text())
     assert updated["default_output_format"] == "text"
 
@@ -44,7 +44,7 @@ def test_migrate_config_dry_run_preview(fake_home: Path) -> None:
     result = cli.migrate_config(config_path, dry_run=True)
 
     assert result["migrated"] is False
-    assert result["changes"] == ["default_output_format: 'plain_text' → 'text'"]
+    assert result["changes"] == ["default_output_format: 'plain_text' becomes 'text'"]
     # Preview should show the migrated value while leaving the file unchanged
     assert result["config"]["default_output_format"] == "text"
     unchanged = json.loads(config_path.read_text())
@@ -102,8 +102,9 @@ def test_migrate_config_command_dry_run(fake_home: Path) -> None:
     )
 
     assert result.exit_code == 0
-    assert "dry-run" in result.output
-    assert "[would change]" in result.output
+    assert "Would change:" in result.output
+    assert "default_output_format: 'plain_text' becomes 'text'" in result.output
+    assert "Hint: Re-run without `--dry-run`" in result.output
     stored = json.loads(config_path.read_text())
     assert stored["default_output_format"] == "plain_text"
 
@@ -120,7 +121,8 @@ def test_migrate_config_command_applies_changes(fake_home: Path) -> None:
     )
 
     assert result.exit_code == 0
-    assert "Applied changes:" in result.output
+    assert "Changed:" in result.output
+    assert "Migration complete." in result.output
     updated = json.loads(config_path.read_text())
     assert updated["default_output_format"] == "text"
 
@@ -138,7 +140,8 @@ def test_migrate_config_command_handles_missing_config(fake_home: Path) -> None:
     )
 
     assert result.exit_code == 0
-    assert "No config file found" in result.output
+    assert "Nothing to migrate: config file not found." in result.output
+    assert "Hint: Create one with `wslshot configure`." in result.output
     assert not config_path.exists()
 
 

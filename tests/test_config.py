@@ -354,7 +354,7 @@ class TestUpdateConfigField:
 
     def test_update_config_field_validates_field_name(self) -> None:
         """Test that invalid field names are rejected."""
-        with pytest.raises(click.ClickException, match="Invalid config field"):
+        with pytest.raises(click.ClickException, match="Unknown config field"):
             cli.update_config_field("invalid_field", "value")
 
     def test_update_config_field_preserves_other_fields(self, fake_home: Path) -> None:
@@ -771,8 +771,8 @@ class TestSetDefaultOutputFormat:
             cli.set_default_output_format("invalid_format")
 
         assert exit_codes == [1]
-        assert any("Invalid output format" in str(msg) for msg in error_messages)
-        assert any("Valid options are" in str(msg) for msg in error_messages)
+        assert any("Invalid `--output-style`" in str(msg) for msg in error_messages)
+        assert any("Use one of: markdown, html, text." in str(msg) for msg in error_messages)
 
 
 class TestSetDefaultConvertTo:
@@ -820,7 +820,7 @@ class TestSetDefaultConvertTo:
             cli.set_default_convert_to("tiff")
 
         assert exit_codes == [1]
-        assert any("Invalid conversion format" in str(msg) for msg in error_messages)
+        assert any("Invalid `--convert-to`" in str(msg) for msg in error_messages)
 
 
 class TestGetConfigInput:
@@ -1063,7 +1063,7 @@ class TestGetValidatedInput:
 
         assert result == "markdown"
         assert call_count[0] == 2
-        assert any("Invalid option" in str(msg) for msg in error_messages)
+        assert any("Invalid value" in str(msg) for msg in error_messages)
 
     def test_get_validated_input_case_insensitive_validation(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1273,7 +1273,7 @@ class TestConfigPermissionEnforcement:
         cli.set_default_source(str(new_source))
 
         captured = capsys.readouterr()
-        assert "Warning: Config file had insecure permissions (0o666)" in captured.err
+        assert "Config file permissions were too open (0o666)" in captured.err
 
     def test_config_write_rejects_symlinks(
         self, fake_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

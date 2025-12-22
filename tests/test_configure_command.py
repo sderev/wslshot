@@ -250,7 +250,7 @@ def test_configure_output_format_with_invalid_value(fake_home: Path) -> None:
     )
 
     assert result.exit_code == 1
-    assert "Invalid output format" in result.output
+    assert "Invalid `--output-style`" in result.output
     assert "markdown, html, text" in result.output
 
 
@@ -278,7 +278,7 @@ def test_configure_output_format_suggests_closest_match(
     )
 
     assert result.exit_code == 1
-    assert "Invalid output format" in result.output
+    assert "Invalid `--output-style`" in result.output
     assert expected_suggestion in result.output
 
 

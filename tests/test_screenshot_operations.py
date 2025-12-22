@@ -292,7 +292,7 @@ def test_get_screenshots_raises_error_when_no_screenshots_found(
         cli.get_screenshots(source, count=1)
 
     assert exit_code == [1]
-    assert any("No screenshot found" in msg for msg in error_messages)
+    assert any("No screenshots found" in msg for msg in error_messages)
 
 
 def test_get_screenshots_raises_error_when_count_exceeds_available(
@@ -331,9 +331,8 @@ def test_get_screenshots_raises_error_when_count_exceeds_available(
 
     assert exit_code == [1]
     # Verify the error message mentions both requested and found counts
-    assert any(
-        "You requested 5 screenshot(s), but only 2 were found" in msg for msg in error_messages
-    )
+    assert any("Only 2 screenshot(s) found" in msg for msg in error_messages)
+    assert any("you asked for 5" in msg for msg in error_messages)
 
 
 # ==================== Copying Screenshots Tests ====================

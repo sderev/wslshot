@@ -35,6 +35,10 @@ import click
 from click_default_group import DefaultGroup
 from PIL import Image
 
+# CLI message prefixes (styled, user-facing)
+SECURITY_ERROR_PREFIX = click.style("Security error:", fg="red")
+WARNING_PREFIX = click.style("Warning:", fg="yellow")
+
 
 class SecurityError(Exception):
     """Security-related error."""
@@ -125,9 +129,8 @@ def normalize_output_format(value: object) -> str:
     normalized = value.casefold()
     if normalized not in VALID_OUTPUT_FORMATS:
         suggestion = suggest_format(value, list(VALID_OUTPUT_FORMATS))
-        message = (
-            f"Invalid output format: {value}. Valid options are: {', '.join(VALID_OUTPUT_FORMATS)}."
-        )
+        valid_options = ", ".join(VALID_OUTPUT_FORMATS)
+        message = f"Invalid `--output-style`: {value}. Use one of: {valid_options}."
         if suggestion:
             message = f"{message} {suggestion}"
         raise ValueError(message)
@@ -147,10 +150,12 @@ def normalize_default_convert_to(value: object) -> str | None:
         return None
 
     if normalized not in VALID_CONVERT_FORMATS:
-        raise ValueError(
-            f"Invalid conversion format: {value}. "
-            f"Valid options are: {', '.join(VALID_CONVERT_FORMATS)}."
-        )
+        valid_options = ", ".join(VALID_CONVERT_FORMATS)
+        suggestion = suggest_format(normalized, list(VALID_CONVERT_FORMATS))
+        message = f"Invalid `--convert-to`: {value}. Use one of: {valid_options}."
+        if suggestion:
+            message = f"{message} {suggestion}"
+        raise ValueError(message)
 
     return normalized
 
@@ -180,39 +185,37 @@ class ConfigFieldSpec:
 
 CONFIG_FIELD_SPECS: dict[str, ConfigFieldSpec] = {
     "default_source": ConfigFieldSpec(
-        prompt="Enter the path for the default source directory",
+        prompt="Default source directory",
         default="",
         normalize=normalize_optional_directory,
     ),
     "default_destination": ConfigFieldSpec(
-        prompt="Enter the path for the default destination directory",
+        prompt="Default destination directory",
         default="",
         normalize=normalize_optional_directory,
     ),
     "auto_stage_enabled": ConfigFieldSpec(
-        prompt="Automatically stage screenshots when copying to a git repository?",
+        prompt="Auto-stage screenshots with `git add`?",
         default=False,
         normalize=normalize_bool,
     ),
     "default_output_format": ConfigFieldSpec(
-        prompt=f"Enter the default output format ({OUTPUT_FORMATS_HELP})",
+        prompt="Default output style (markdown, html, text)",
         default=DEFAULT_OUTPUT_FORMAT,
         normalize=normalize_output_format,
     ),
     "default_convert_to": ConfigFieldSpec(
-        prompt="Enter the default conversion format (png, jpg/jpeg, webp, gif, or leave empty for none)",
+        prompt="Default conversion format (png, jpg/jpeg, webp, gif). Leave empty for none.",
         default=None,
         normalize=normalize_default_convert_to,
     ),
     "max_file_size_mb": ConfigFieldSpec(
-        prompt="Enter the maximum allowed file size in MB (per file, hard limit: 50MB ceiling)",
+        prompt="Per-file size limit in MB (max 50)",
         default=MAX_IMAGE_FILE_SIZE_BYTES // (1024 * 1024),
         normalize=normalize_int,
     ),
     "max_total_size_mb": ConfigFieldSpec(
-        prompt=(
-            "Enter the maximum total size in MB for a batch (hard limit: 200MB ceiling; <=0 applies ceiling)"
-        ),
+        prompt="Max total size in MB per batch (max 200). Use <=0 for 200.",
         default=MAX_TOTAL_IMAGE_SIZE_BYTES // (1024 * 1024),
         normalize=normalize_int,
     ),
@@ -266,10 +269,7 @@ def _backup_corrupted_file_or_warn(config_file_path: Path) -> None:
             (config_file_path, backup_path) if backup_path is not None else (config_file_path,),
         )
         click.echo(
-            click.style(
-                f"Warning: Failed to backup corrupted config: {sanitized}",
-                fg="yellow",
-            ),
+            f"{WARNING_PREFIX} Could not back up the corrupted config file: {sanitized}",
             err=True,
         )
 
@@ -346,7 +346,7 @@ def write_config_safely(config_file_path: Path, config_data: dict[str, object]) 
         current_perms = config_file_path.stat().st_mode & FILE_PERMISSION_MASK
         if current_perms != CONFIG_FILE_PERMISSIONS:
             click.echo(
-                f"Warning: Config file had insecure permissions ({oct(current_perms)}). "
+                f"{WARNING_PREFIX} Config file permissions were too open ({oct(current_perms)}). "
                 f"Resetting to {oct(CONFIG_FILE_PERMISSIONS)}.",
                 err=True,
             )
@@ -367,7 +367,10 @@ def write_config_or_exit(config_file_path: Path, config_data: dict[str, object])
         write_config_safely(config_file_path, config_data)
     except (FileNotFoundError, SecurityError, OSError) as error:
         sanitized_error = format_path_error(error)
-        click.echo(f"Failed to write configuration file: {sanitized_error}", err=True)
+        click.echo(
+            click.style(f"Error: Failed to write config file: {sanitized_error}", fg="red"),
+            err=True,
+        )
         sys.exit(1)
 
 
@@ -566,8 +569,8 @@ def validate_image_file(
 
     if max_size is not None and size_value > max_size:
         raise ValueError(
-            f"File too large: {size_value / 1024 / 1024:.2f}MB "
-            f"(maximum: {max_size / 1024 / 1024:.0f}MB)"
+            f"File too large: {file_path.name} ({size_value / 1024 / 1024:.2f}MB; "
+            f"max {max_size / 1024 / 1024:.0f}MB)"
         )
 
     # Validate magic bytes using Pillow
@@ -687,60 +690,59 @@ def suggest_format(invalid_format: str, valid_formats: list[str]) -> str:
 @click.version_option(package_name="wslshot")
 def wslshot():
     """
-    Fetches and copies the latest screenshot(s) from the source to the specified destination.
+    Copy screenshots and print their copied paths (defaults to `fetch`).
 
-    Usage:
-
-    - Customize the number of screenshots with --count.
-    - Specify source and destination directories with --source and --destination.
-    - Customize output style (Markdown, HTML, or text) with --output-style.
+    \b
+    Examples:
+      wslshot
+      wslshot --count 3
+      wslshot "<...>/screenshot.png"
+      wslshot configure
     """
 
 
 @wslshot.command()
-@click.option("--source", "-s", help="Specify a custom source directory for this operation.")
+@click.option("--source", "-s", help="Source directory for this run (overrides config).")
 @click.option(
     "--destination",
     "-d",
-    help="Specify a custom destination directory for this operation.",
+    help="Destination directory for this run (overrides config).",
 )
 @click.option(
     "--count",
     "-n",
     default=1,
     type=click.IntRange(min=1),
-    help="Specify the number of most recent screenshots to fetch. Defaults to 1.",
+    help="How many screenshots to copy (newest first). Default: 1.",
 )
 @click.option(
     "--output-style",
     "output_format",
-    help=(
-        f"Specify the output style ({OUTPUT_FORMATS_HELP}). Overrides the default set in config."
-    ),
+    help=(f"Output style for printed paths ({OUTPUT_FORMATS_HELP}; overrides config)."),
 )
 @click.option(
     "--convert-to",
     "-c",
     type=click.Choice(list(VALID_CONVERT_FORMATS), case_sensitive=False),
-    help="Convert screenshot(s) to the specified format (png, jpg/jpeg, webp, gif).",
+    help="Convert copied screenshots to this format (png, jpg/jpeg, webp, gif).",
 )
 @click.option(
     "--allow-symlinks",
     is_flag=True,
     default=False,
-    help="⚠️  Allow symlinks (WARNING: Security risk - only use with trusted paths).",
+    help="Allow symlinks in paths (security risk; use only with trusted paths).",
 )
 @click.argument("image_path", type=click.Path(exists=True), required=False)
 def fetch(source, destination, count, output_format, convert_to, allow_symlinks, image_path):
     """
-    Fetches and copies the latest screenshot(s) from the source to the specified destination.
+    Copy screenshots into the destination directory and print their copied paths.
 
-    Args:
-
-    - source: The source directory.
-    - destination: The destination directory.
-    - count: The number of screenshots to fetch.
-    - output: The output format.
+    \b
+    Examples:
+      wslshot fetch
+      wslshot fetch --count 5
+      wslshot fetch --convert-to webp
+      wslshot fetch "<...>/screenshot.png"
     """
     config = read_config(get_config_file_path_or_exit())
     max_file_size_bytes, max_total_size_bytes = get_size_limits(config)
@@ -753,17 +755,18 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
         source = resolve_path_safely(source, check_symlink=not allow_symlinks)
     except ValueError as error:
         sanitized_error = format_path_error(error)
-        click.echo(f"{click.style('Security Error:', fg='red')} {sanitized_error}", err=True)
-        if allow_symlinks:
-            click.echo("Symlink check was disabled with --allow-symlinks", err=True)
-        else:
-            click.echo("If you trust this path, use: --allow-symlinks", err=True)
+        click.echo(f"{SECURITY_ERROR_PREFIX} {sanitized_error}", err=True)
+        click.echo("Hint: If you trust this path, rerun with `--allow-symlinks`.", err=True)
         sys.exit(1)
     except FileNotFoundError:
         click.echo(
-            f"{click.style(f'Source directory {sanitize_path_for_error(source)} does not exist.', fg='red')}",
+            click.style(
+                f"Error: Source directory not found: {sanitize_path_for_error(source)}",
+                fg="red",
+            ),
             err=True,
         )
+        click.echo("Hint: Set `--source` or run `wslshot configure`.", err=True)
         sys.exit(1)
 
     # Destination directory
@@ -774,17 +777,18 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
         destination = resolve_path_safely(destination, check_symlink=not allow_symlinks)
     except ValueError as error:
         sanitized_error = format_path_error(error)
-        click.echo(f"{click.style('Security Error:', fg='red')} {sanitized_error}", err=True)
-        if allow_symlinks:
-            click.echo("Symlink check was disabled with --allow-symlinks", err=True)
-        else:
-            click.echo("If you trust this path, use: --allow-symlinks", err=True)
+        click.echo(f"{SECURITY_ERROR_PREFIX} {sanitized_error}", err=True)
+        click.echo("Hint: If you trust this path, rerun with `--allow-symlinks`.", err=True)
         sys.exit(1)
     except FileNotFoundError:
         click.echo(
-            f"{click.style(f'Destination directory {sanitize_path_for_error(destination)} does not exist.', fg='red')}",
+            click.style(
+                f"Error: Destination directory not found: {sanitize_path_for_error(destination)}",
+                fg="red",
+            ),
             err=True,
         )
+        click.echo("Hint: Set `--destination` or run `wslshot configure`.", err=True)
         sys.exit(1)
 
     # Output format
@@ -792,11 +796,16 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
         output_format = config["default_output_format"]
 
     if output_format.casefold() not in VALID_OUTPUT_FORMATS:
-        click.echo(f"Invalid output format: {output_format}", err=True)
-        click.echo(f"Valid options are: {', '.join(VALID_OUTPUT_FORMATS)}", err=True)
+        click.echo(
+            click.style(f"Error: Invalid `--output-style`: {output_format}", fg="red"),
+            err=True,
+        )
+        valid_options = ", ".join(VALID_OUTPUT_FORMATS)
         suggestion = suggest_format(output_format, list(VALID_OUTPUT_FORMATS))
+        hint = f"Hint: Use one of: {valid_options}."
         if suggestion:
-            click.echo(suggestion, err=True)
+            hint = f"{hint} {suggestion}"
+        click.echo(hint, err=True)
         sys.exit(1)
 
     # Convert format
@@ -813,24 +822,28 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
             validate_image_file(image_path_resolved, max_size_bytes=max_file_size_bytes)
         except ValueError as error:
             sanitized_error = format_path_error(error)
-            click.echo(
-                f"{click.style('Security Error:', fg='red')} {sanitized_error}",
-                err=True,
-            )
-            click.echo(f"Source file: {sanitize_path_for_error(image_path)}", err=True)
+            error_msg = str(error).casefold()
+            if "symlink" in error_msg:
+                click.echo(f"{SECURITY_ERROR_PREFIX} {sanitized_error}", err=True)
+                if not allow_symlinks:
+                    click.echo(
+                        "Hint: If you trust this path, rerun with `--allow-symlinks`.",
+                        err=True,
+                    )
+            else:
+                click.echo(click.style(f"Error: {sanitized_error}", fg="red"), err=True)
 
-            # Only suggest --allow-symlinks for symlink-related errors
-            # Content validation errors should not suggest disabling symlink checks
-            error_msg = str(error).lower()
-            if not allow_symlinks and "symlink" in error_msg:
-                click.echo("If you trust this path, use: --allow-symlinks", err=True)
+            click.echo(f"Source file: {sanitize_path_for_error(image_path)}", err=True)
             sys.exit(1)
-        except FileNotFoundError as error:
-            sanitized_error = format_path_error(error)
+        except FileNotFoundError:
             click.echo(
-                f"{click.style('Error:', fg='red')} Image file not found: {sanitized_error}",
+                click.style(
+                    f"Error: Image file not found: {sanitize_path_for_error(image_path)}",
+                    fg="red",
+                ),
                 err=True,
             )
+            click.echo("Hint: Check the path and try again.", err=True)
             sys.exit(1)
 
         image_path = (image_path_resolved,)  # For compatibility with copy_screenshots()
@@ -842,7 +855,7 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
                 max_total_size_bytes=max_total_size_bytes,
             )
         except ValueError as error:
-            click.echo(f"{click.style('Error:', fg='red')} {error}", err=True)
+            click.echo(click.style(f"Error: {error}", fg="red"), err=True)
             sys.exit(1)
     else:
         # Copy the screenshot(s) to the destination directory.
@@ -855,7 +868,7 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
                 max_total_size_bytes=max_total_size_bytes,
             )
         except ValueError as error:
-            click.echo(f"{click.style('Error:', fg='red')} {error}", err=True)
+            click.echo(click.style(f"Error: {error}", fg="red"), err=True)
             sys.exit(1)
 
     # Convert images if --convert-to option is provided
@@ -866,13 +879,8 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
                 converted_path = convert_image_format(screenshot, convert_to)
                 converted_screenshots += (converted_path,)
             except ValueError as error:
-                sanitized_screenshot = sanitize_path_for_error(screenshot)
                 sanitized_error = sanitize_error_message(str(error), (screenshot,))
-                click.echo(
-                    f"{click.style('Failed to convert image:', fg='red')} {sanitized_screenshot}",
-                    err=True,
-                )
-                click.echo(f"{sanitized_error}", err=True)
+                click.echo(click.style(f"Error: {sanitized_error}", fg="red"), err=True)
                 sys.exit(1)
         copied_screenshots = converted_screenshots
 
@@ -883,7 +891,7 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
         try:
             git_root = get_git_root()
         except RuntimeError as error:
-            click.echo(click.style(str(error), fg="red"), err=True)
+            click.echo(click.style(f"Error: {error}", fg="red"), err=True)
         else:
             relative_screenshots = format_screenshots_path_for_git(copied_screenshots, git_root)
 
@@ -935,7 +943,7 @@ def get_screenshots(
                             except ValueError as e:
                                 # Graceful degradation: skip invalid files with warning
                                 click.echo(
-                                    f"{click.style('Warning:', fg='yellow')} Skipping invalid file: {e}",
+                                    f"{WARNING_PREFIX} Skipping invalid image file: {e}",
                                     err=True,
                                 )
                     except OSError:
@@ -946,29 +954,37 @@ def get_screenshots(
         top_files = heapq.nlargest(count, file_stats, key=lambda x: x[1])
         screenshots = [file for file, _ in top_files]
 
+        sanitized_source = sanitize_path_for_error(source)
+
         if len(screenshots) == 0:
-            raise ValueError("No screenshot found.")
+            click.echo(
+                click.style(
+                    f"Error: No screenshots found in {sanitized_source}",
+                    fg="red",
+                ),
+                err=True,
+            )
+            click.echo("Hint: Set `--source` or run `wslshot configure`.", err=True)
+            sys.exit(1)
 
         if len(screenshots) < count:
-            raise ValueError(
-                f"You requested {count} screenshot(s), but only {len(screenshots)} were found."
+            click.echo(
+                click.style(
+                    f"Error: Only {len(screenshots)} screenshot(s) found in {sanitized_source}, "
+                    f"but you asked for {count}.",
+                    fg="red",
+                ),
+                err=True,
             )
-    except ValueError as error:
-        click.echo(
-            f"{click.style('An error occurred while fetching the screenshot(s).', fg='red')}",
-            err=True,
-        )
-        click.echo(f"{error}", err=True)
-        click.echo(f"Source directory: {sanitize_path_for_error(source)}\n", err=True)
-        sys.exit(1)
+            click.echo("Hint: Lower `--count` or check the source directory.", err=True)
+            sys.exit(1)
     except OSError as error:
         sanitized_error = format_path_error(error)
         click.echo(
-            f"{click.style('An error occurred while fetching the screenshot(s).', fg='red')}",
+            click.style(f"Error: {sanitized_error}", fg="red"),
             err=True,
         )
-        click.echo(f"{sanitized_error}", err=True)
-        click.echo(f"Source directory: {sanitize_path_for_error(source)}\n", err=True)
+        click.echo(f"Source directory: {sanitize_path_for_error(source)}", err=True)
         sys.exit(1)
 
     return tuple(screenshots)
@@ -1007,7 +1023,8 @@ def copy_screenshots(
         except OSError as e:
             sanitized_error = sanitize_error_message(str(e), (screenshot,))
             click.echo(
-                f"{click.style('Warning:', fg='yellow')} Skipping unreadable file: {sanitize_path_for_error(screenshot)} ({sanitized_error})",
+                f"{WARNING_PREFIX} Cannot read file. Skipping: {sanitize_path_for_error(screenshot)} "
+                f"({sanitized_error})",
                 err=True,
             )
             continue
@@ -1025,9 +1042,8 @@ def copy_screenshots(
 
             if total_limit is not None and total_size > total_limit:
                 click.echo(
-                    f"{click.style('Warning:', fg='yellow')} Total size limit "
-                    f"({total_limit / 1024 / 1024:.0f}MB) exceeded. "
-                    f"Skipping remaining files.",
+                    f"{WARNING_PREFIX} Total size limit reached "
+                    f"({total_limit / 1024 / 1024:.0f}MB). Skipping remaining files.",
                     err=True,
                 )
                 break
@@ -1035,7 +1051,7 @@ def copy_screenshots(
         except ValueError as e:
             # Graceful degradation: skip invalid files with warning
             click.echo(
-                f"{click.style('Warning:', fg='yellow')} Skipping invalid file: {e}",
+                f"{WARNING_PREFIX} Skipping invalid image file: {e}",
                 err=True,
             )
             continue
@@ -1047,7 +1063,7 @@ def copy_screenshots(
         except OSError as e:
             sanitized_error = sanitize_error_message(str(e), (screenshot, new_screenshot_path))
             raise ValueError(
-                f"Failed to copy screenshot {sanitize_path_for_error(screenshot)} "
+                f"Could not copy {sanitize_path_for_error(screenshot)} "
                 f"to {sanitize_path_for_error(new_screenshot_path)}: {sanitized_error}"
             ) from e
         copied_screenshots += (Path(destination) / new_screenshot_name,)
@@ -1157,6 +1173,7 @@ def stage_screenshots(screenshots: tuple[Path, ...], git_root: Path) -> None:
     except subprocess.CalledProcessError:
         # Batch staging failed - fall back to individual staging
         # This ensures valid files are staged even if some fail
+        hinted = False
         for screenshot in screenshots:
             try:
                 subprocess.run(
@@ -1165,10 +1182,14 @@ def stage_screenshots(screenshots: tuple[Path, ...], git_root: Path) -> None:
                     cwd=git_root,
                 )
             except subprocess.CalledProcessError as e:
-                click.echo(
-                    f"Warning: Failed to stage screenshot '{screenshot}': {e}",
-                    err=True,
-                )
+                click.echo(f"{WARNING_PREFIX} Auto-staging failed for {screenshot}: {e}", err=True)
+                if not hinted:
+                    click.echo(
+                        "Hint: Disable it with `wslshot configure --auto-stage-enabled false`, "
+                        "or run `git add` yourself.",
+                        err=True,
+                    )
+                    hinted = True
 
 
 def format_screenshots_path_for_git(
@@ -1219,7 +1240,9 @@ def print_formatted_path(
             click.echo(screenshot_path)
 
         else:
-            click.echo(f"Invalid output format: {output_format}", err=True)
+            valid_options = ", ".join(VALID_OUTPUT_FORMATS)
+            click.echo(f"Error: Invalid `--output-style`: {output_format}", err=True)
+            click.echo(f"Hint: Use one of: {valid_options}.", err=True)
             sys.exit(1)
 
 
@@ -1247,7 +1270,8 @@ def get_config_file_path_or_exit(*, create_if_missing: bool = True) -> Path:
     try:
         return get_config_file_path(create_if_missing=create_if_missing)
     except SecurityError as error:
-        click.echo(click.style(f"Security Error: {error}", fg="red"), err=True)
+        click.echo(f"{SECURITY_ERROR_PREFIX} {error}", err=True)
+        click.echo("Hint: Remove the symlink and rerun `wslshot configure`.", err=True)
         sys.exit(1)
 
 
@@ -1271,11 +1295,8 @@ def read_config(config_file_path: Path) -> dict[str, object]:
     except json.JSONDecodeError as error:
         if _is_interactive_terminal():
             click.echo(
-                click.style(
-                    f"Warning: Config file {sanitize_path_for_error(config_file_path)} is corrupted "
-                    f"({error}); recreating it interactively.",
-                    fg="yellow",
-                ),
+                f"{WARNING_PREFIX} Config file {sanitize_path_for_error(config_file_path)} is corrupted ({error}). "
+                "We'll recreate it interactively.",
                 err=True,
             )
             _backup_corrupted_file_or_warn(config_file_path)
@@ -1285,13 +1306,11 @@ def read_config(config_file_path: Path) -> dict[str, object]:
             return config
 
         click.echo(
-            click.style(
-                f"Warning: Config file {sanitize_path_for_error(config_file_path)} is corrupted "
-                f"({error}); replacing it with defaults (non-interactive run).",
-                fg="yellow",
-            ),
+            f"{WARNING_PREFIX} Config file {sanitize_path_for_error(config_file_path)} is corrupted ({error}). "
+            "Resetting to defaults.",
             err=True,
         )
+        click.echo("Hint: Run `wslshot configure` to set your preferences.", err=True)
 
         _backup_corrupted_file_or_warn(config_file_path)
 
@@ -1307,7 +1326,7 @@ def migrate_config(config_path: Path, *, dry_run: bool = False) -> dict[str, obj
     Migrate legacy config values to current format.
 
     Migrations performed:
-    - `plain_text` → `text` in `default_output_format`
+    - `plain_text` becomes `text` in `default_output_format`
 
     Args:
         config_path: Path to config file
@@ -1329,14 +1348,14 @@ def migrate_config(config_path: Path, *, dry_run: bool = False) -> dict[str, obj
         return {
             "migrated": False,
             "changes": [],
-            "error": f"Cannot read config: {sanitized_error}",
+            "error": f"Cannot read config file: {sanitized_error}",
             "config": {},
         }
     except json.JSONDecodeError as e:
         return {
             "migrated": False,
             "changes": [],
-            "error": f"Cannot read config: {e}",
+            "error": f"Cannot read config file: {e}",
             "config": {},
         }
 
@@ -1345,20 +1364,20 @@ def migrate_config(config_path: Path, *, dry_run: bool = False) -> dict[str, obj
         return {
             "migrated": False,
             "changes": [],
-            "error": f"Invalid config format: expected object, got {type(config).__name__}",
+            "error": f"Invalid config format: expected an object, got {type(config).__name__}",
             "config": {},
         }
 
     changes = []
 
-    # Migration: plain_text → text
+    # Migration: plain_text becomes text
     default_output_format = config.get("default_output_format")
     if (
         isinstance(default_output_format, str)
         and default_output_format.casefold() == LEGACY_OUTPUT_FORMAT_PLAIN_TEXT
     ):
         config["default_output_format"] = OUTPUT_FORMAT_TEXT
-        changes.append("default_output_format: 'plain_text' → 'text'")
+        changes.append("default_output_format: 'plain_text' becomes 'text'")
 
     # Write migrated config
     if changes and not dry_run:
@@ -1369,7 +1388,7 @@ def migrate_config(config_path: Path, *, dry_run: bool = False) -> dict[str, obj
             return {
                 "migrated": False,
                 "changes": changes,
-                "error": f"Cannot write config: {sanitized_error}",
+                "error": f"Cannot write config file: {sanitized_error}",
                 "config": config,
             }
 
@@ -1396,9 +1415,9 @@ def write_config(config_file_path: Path) -> None:
         current_config = {}
 
     if current_config:
-        click.echo(f"{click.style('Updating the configuration file...', fg='yellow')}")
+        click.echo(click.style("Updating config file...", fg="yellow"))
     else:
-        click.echo(f"{click.style('Creating the configuration file...', fg='yellow')}")
+        click.echo(click.style("Creating config file...", fg="yellow"))
     click.echo()
 
     # Prompt the user for configuration values.
@@ -1434,7 +1453,7 @@ def write_config(config_file_path: Path) -> None:
                 try:
                     config[field] = spec.normalize(value)
                 except ValueError as error:
-                    click.echo(click.style(str(error), fg="red"))
+                    click.echo(click.style(f"Error: {error}", fg="red"), err=True)
                     click.echo()
                     continue
                 break
@@ -1455,9 +1474,9 @@ def write_config(config_file_path: Path) -> None:
     write_config_or_exit(config_file_path, config)
 
     if current_config:
-        click.echo(f"{click.style('Configuration file updated', fg='green')}")
+        click.echo(click.style("Configuration saved.", fg="green"))
     else:
-        click.echo(f"{click.style('Configuration file created', fg='green')}")
+        click.echo(click.style("Configuration file created.", fg="green"))
 
 
 def get_config_input(field, message, current_config, default="") -> str:
@@ -1492,14 +1511,14 @@ def get_validated_directory_input(field, message, current_config, default) -> st
             return str(resolve_path_safely(directory))
         except ValueError as error:
             sanitized_msg = format_path_error(error)
-            click.echo(
-                click.style(f"Security Error: {sanitized_msg}", fg="red"),
-                err=True,
-            )
+            click.echo(f"{SECURITY_ERROR_PREFIX} {sanitized_msg}", err=True)
         except FileNotFoundError as error:
             sanitized_msg = format_path_error(error)
             click.echo(
-                click.style(f"Invalid {field.replace('_', ' ')}: {sanitized_msg}", fg="red"),
+                click.style(
+                    f"Error: Invalid {field.replace('_', ' ')}: {sanitized_msg}",
+                    fg="red",
+                ),
                 err=True,
             )
         finally:
@@ -1520,9 +1539,11 @@ def get_validated_input(field, message, current_config, default="", options=None
         if options and value.lower() not in options:
             click.echo(
                 click.style(
-                    f"Invalid option for {field.replace('_', ' ')}. Please choose from {', '.join(options)}.",
+                    f"Error: Invalid value for {field.replace('_', ' ')}. "
+                    f"Use one of: {', '.join(options)}.",
                     fg="red",
-                )
+                ),
+                err=True,
             )
             continue
 
@@ -1533,7 +1554,7 @@ def _write_config_field(field: str, normalized_value: object) -> None:
     """
     Persist a single, already-normalized config field value.
 
-    This helper centralizes the read → update → write sequence for setter functions that
+    This helper centralizes the read, update, and write sequence for setter functions that
     perform their own validation and normalization.
     """
     config_file_path = get_config_file_path_or_exit()
@@ -1556,13 +1577,16 @@ def update_config_field(field: str, value: object) -> None:
     """
     spec = CONFIG_FIELD_SPECS.get(field)
     if spec is None:
-        raise click.ClickException(f"Invalid config field: {field}")
+        raise click.ClickException(f"Unknown config field: {field}")
 
     try:
         normalized_value = spec.normalize(value)
     except (ValueError, TypeError, FileNotFoundError) as error:
         sanitized = format_path_error(error)
-        raise click.ClickException(f"Invalid value for {field}: {sanitized}") from error
+        raise click.ClickException(
+            f"Invalid value for {field}: {sanitized}\n"
+            "Hint: See `wslshot configure --help` for valid values."
+        ) from error
 
     _write_config_field(field, normalized_value)
 
@@ -1581,12 +1605,13 @@ def set_default_source(source_str: str) -> None:
             source = str(resolve_path_safely(source_str))
         except ValueError as error:
             sanitized_msg = format_path_error(error)
-            click.echo(click.style(f"Security Error: {sanitized_msg}", fg="red"), err=True)
+            click.echo(f"{SECURITY_ERROR_PREFIX} {sanitized_msg}", err=True)
             sys.exit(1)
         except FileNotFoundError as error:
             sanitized_msg = format_path_error(error)
             click.echo(
-                click.style(f"Invalid source directory: {sanitized_msg}", fg="red"), err=True
+                click.style(f"Error: Invalid source directory: {sanitized_msg}", fg="red"),
+                err=True,
             )
             sys.exit(1)
 
@@ -1607,12 +1632,16 @@ def set_default_destination(destination_str: str) -> None:
             destination = str(resolve_path_safely(destination_str))
         except ValueError as error:
             sanitized_msg = format_path_error(error)
-            click.echo(click.style(f"Security Error: {sanitized_msg}", fg="red"), err=True)
+            click.echo(f"{SECURITY_ERROR_PREFIX} {sanitized_msg}", err=True)
             sys.exit(1)
         except FileNotFoundError as error:
             sanitized_msg = format_path_error(error)
             click.echo(
-                click.style(f"Invalid destination directory: {sanitized_msg}", fg="red"), err=True
+                click.style(
+                    f"Error: Invalid destination directory: {sanitized_msg}",
+                    fg="red",
+                ),
+                err=True,
             )
             sys.exit(1)
 
@@ -1668,7 +1697,7 @@ def get_git_root() -> Path:
             stderr=subprocess.PIPE,
         ).stdout
     except subprocess.CalledProcessError as error:
-        raise RuntimeError("Failed to get git root directory.") from error
+        raise RuntimeError("Could not determine the Git repository root.") from error
 
     return Path(git_root_bytes.strip().decode("utf-8")).resolve()
 
@@ -1683,7 +1712,8 @@ def get_git_repo_img_destination() -> Path:
     try:
         git_root = get_git_root()
     except RuntimeError as error:
-        sys.exit(str(error))
+        click.echo(click.style(f"Error: {error}", fg="red"), err=True)
+        sys.exit(1)
 
     for relative_parts in GIT_IMAGE_DIRECTORY_PRIORITY:
         candidate = git_root.joinpath(*relative_parts)
@@ -1713,11 +1743,16 @@ def set_default_output_format(output_format: str) -> None:
         output_format: The default output format.
     """
     if output_format.casefold() not in VALID_OUTPUT_FORMATS:
-        click.echo(click.style(f"Invalid output format: {output_format}", fg="red"), err=True)
-        click.echo(f"Valid options are: {', '.join(VALID_OUTPUT_FORMATS)}", err=True)
+        click.echo(
+            click.style(f"Error: Invalid `--output-style`: {output_format}", fg="red"),
+            err=True,
+        )
+        valid_options = ", ".join(VALID_OUTPUT_FORMATS)
         suggestion = suggest_format(output_format, list(VALID_OUTPUT_FORMATS))
+        hint = f"Hint: Use one of: {valid_options}."
         if suggestion:
-            click.echo(click.style(suggestion, fg="yellow"), err=True)
+            hint = f"{hint} {suggestion}"
+        click.echo(hint, err=True)
         sys.exit(1)
 
     _write_config_field("default_output_format", output_format.casefold())
@@ -1733,54 +1768,47 @@ def set_default_convert_to(convert_format: str | None) -> None:
     try:
         normalized_convert_format = normalize_default_convert_to(convert_format)
     except (TypeError, ValueError) as error:
-        click.echo(click.style(str(error), fg="red"), err=True)
+        click.echo(click.style(f"Error: {error}", fg="red"), err=True)
         sys.exit(1)
 
     _write_config_field("default_convert_to", normalized_convert_format)
 
 
 @wslshot.command()
-@click.option("--source", "-s", help="Specify the default source directory for this operation.")
+@click.option("--source", "-s", help="Default source directory used by `wslshot fetch`.")
 @click.option(
     "--destination",
     "-d",
-    help="Specify the default destination directory for this operation.",
+    help="Default destination directory used by `wslshot fetch`.",
 )
 @click.option(
     "--auto-stage-enabled",
     type=bool,
-    help=("Control whether screenshots are automatically staged when copied to a git repository."),
+    help="Automatically run `git add` on copied screenshots when in a Git repo.",
 )
 @click.option(
     "--output-style",
     "output_format",
-    help=f"Set the default output style ({OUTPUT_FORMATS_HELP}).",
+    help=f"Default output style for printed paths ({OUTPUT_FORMATS_HELP}).",
 )
 @click.option(
     "--convert-to",
     "-c",
     type=click.Choice(list(VALID_CONVERT_FORMATS), case_sensitive=False),
-    help="Set the default image conversion format.",
+    help="Default format to convert to after copying (png, jpg/jpeg, webp, gif).",
 )
 def configure(source, destination, auto_stage_enabled, output_format, convert_to):
     """
-    Set the default source directory, control automatic staging, and set the default output style.
+    Set defaults for `wslshot fetch` (paths, output style, conversion, and Git auto-staging).
 
-    Usage:
+    Run with no options to configure interactively.
 
-    - Specify the default source directory with --source.
-
-    - Control whether screenshots are automatically staged with --auto-stage.
-
-    - Set the default output style with --output-style.
-
-    ___
-
-    The source directory must be a shared folder between Windows and your Linux VM:
-
-    - If you are using WSL, you can choose the 'Screenshots' folder in your 'Pictures' directory. (e.g., /mnt/c/users/...)
-
-    - For VM users, you should configure a shared folder between Windows and the VM before proceeding.
+    \b
+    Examples:
+      wslshot configure
+      wslshot configure --source "<...>/Screenshots"
+      wslshot configure --destination "<...>/img"
+      wslshot configure --output-style text
     """
     # When no options are specified, ask the user for their preferences.
     if all(x is None for x in (source, destination, auto_stage_enabled, output_format, convert_to)):
@@ -1808,24 +1836,25 @@ def configure(source, destination, auto_stage_enabled, output_format, convert_to
     "--dry-run",
     is_flag=True,
     default=False,
-    help="Preview changes without applying them.",
+    help="Show what would change without writing.",
 )
 def migrate_config_cmd(dry_run):
     """
-    Migrate configuration file to current format.
+    Migrate older config values to the current names (for example, `plain_text` to `text`).
 
-    Converts legacy values to current equivalents:
-    - 'plain_text' → 'text' in output format
-
-    Use --dry-run to preview changes before applying.
+    \b
+    Examples:
+      wslshot migrate-config --dry-run
+      wslshot migrate-config
     """
     config_path = get_config_file_path_or_exit(create_if_missing=False)
 
     if not config_path.exists():
         click.echo(
-            click.style("No config file found. Nothing to migrate.", fg="yellow"),
+            click.style("Nothing to migrate: config file not found.", fg="yellow"),
             err=True,
         )
+        click.echo("Hint: Create one with `wslshot configure`.", err=True)
         sys.exit(0)
 
     click.echo(f"Config file: {sanitize_path_for_error(config_path)}")
@@ -1834,26 +1863,28 @@ def migrate_config_cmd(dry_run):
     result = migrate_config(config_path, dry_run=dry_run)
 
     if "error" in result:
-        click.echo(click.style(f"Error: {result['error']}", fg="red"), err=True)
+        click.echo(
+            click.style(f"Error: {result['error']}", fg="red"),
+            err=True,
+        )
         sys.exit(1)
 
     if not result["changes"]:
-        click.echo(click.style("✓ Config is up to date. No migration needed.", fg="green"))
+        click.echo(click.style("Config is up to date. No migration needed.", fg="green"))
         sys.exit(0)
 
     # Show changes
     if dry_run:
-        click.echo(click.style("Preview of changes (dry-run):", fg="yellow"))
+        click.echo(click.style("Would change:", fg="yellow"))
     else:
-        click.echo(click.style("Applied changes:", fg="green"))
+        click.echo(click.style("Changed:", fg="green"))
 
     for change in result["changes"]:
-        prefix = "  [would change]" if dry_run else "  ✓"
-        click.echo(f"{prefix} {change}")
+        click.echo(f"  - {change}")
 
     if dry_run:
         click.echo()
-        click.echo("Run without --dry-run to apply these changes.")
+        click.echo("Hint: Re-run without `--dry-run` to apply these changes.")
     else:
         click.echo()
-        click.echo(click.style("Migration completed successfully.", fg="green"))
+        click.echo(click.style("Migration complete.", fg="green"))

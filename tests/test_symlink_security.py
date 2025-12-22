@@ -134,7 +134,7 @@ class TestFetchCommandSymlinkSecurity:
         )
 
         assert result.exit_code == 1
-        assert "Security Error" in result.output
+        assert "Security error" in result.output
         assert "Symlinks are not allowed" in result.output
 
     def test_rejects_symlink_destination_directory(self, tmp_path):
@@ -158,7 +158,7 @@ class TestFetchCommandSymlinkSecurity:
         )
 
         assert result.exit_code == 1
-        assert "Security Error" in result.output
+        assert "Security error" in result.output
         assert "Symlinks are not allowed" in result.output
 
     def test_rejects_symlink_as_direct_file_path(self, tmp_path):
@@ -182,7 +182,7 @@ class TestFetchCommandSymlinkSecurity:
         )
 
         assert result.exit_code == 1
-        assert "Security Error" in result.output
+        assert "Security error" in result.output
         assert "Symlinks are not allowed" in result.output
 
     def test_rejects_symlink_in_image_path_parent(self, tmp_path):
@@ -211,7 +211,7 @@ class TestFetchCommandSymlinkSecurity:
         )
 
         assert result.exit_code == 1
-        assert "Security Error" in result.output
+        assert "Security error" in result.output
         assert "Path contains symlink" in result.output
 
     def test_rejects_symlink_in_source_parent_chain(self, tmp_path):
@@ -240,7 +240,7 @@ class TestFetchCommandSymlinkSecurity:
         )
 
         assert result.exit_code == 1
-        assert "Security Error" in result.output
+        assert "Security error" in result.output
         assert "Path contains symlink" in result.output
 
     def test_rejects_symlink_in_destination_parent_chain(self, tmp_path):
@@ -269,7 +269,7 @@ class TestFetchCommandSymlinkSecurity:
         )
 
         assert result.exit_code == 1
-        assert "Security Error" in result.output
+        assert "Security error" in result.output
         assert "Path contains symlink" in result.output
 
 
@@ -295,7 +295,7 @@ class TestConfigureCommandSymlinkSecurity:
         )
 
         assert result.exit_code == 1
-        assert "Security Error" in result.output
+        assert "Security error" in result.output
         assert "Symlinks are not allowed" in result.output
 
     def test_rejects_symlink_destination(self, tmp_path):
@@ -317,7 +317,7 @@ class TestConfigureCommandSymlinkSecurity:
         )
 
         assert result.exit_code == 1
-        assert "Security Error" in result.output
+        assert "Security error" in result.output
         assert "Symlinks are not allowed" in result.output
 
 
@@ -350,7 +350,7 @@ class TestAttackScenarios:
 
         # Verify attack is blocked
         assert result.exit_code == 1
-        assert "Security Error" in result.output
+        assert "Security error" in result.output
         assert "Symlinks are not allowed" in result.output
 
         # Verify SSH key was NOT copied to git repo
@@ -383,7 +383,7 @@ class TestAttackScenarios:
 
         # Verify attack is blocked
         assert result.exit_code == 1
-        assert "Security Error" in result.output
+        assert "Security error" in result.output
         assert "Symlinks are not allowed" in result.output
 
     def test_cannot_exfiltrate_etc_passwd(self, tmp_path):
@@ -412,7 +412,7 @@ class TestAttackScenarios:
 
         # Verify attack is blocked
         assert result.exit_code == 1
-        assert "Security Error" in result.output
+        assert "Security error" in result.output
 
         # Verify /etc/passwd was NOT copied
         copied_files = list(destination.iterdir())
@@ -454,7 +454,7 @@ class TestAllowSymlinksFlag:
 
         # Should succeed (exit code 0)
         assert result.exit_code == 0, f"Command failed: {result.output}"
-        assert "Security Error" not in result.output
+        assert "Security error" not in result.output
 
     def test_flag_allows_symlink_destination(self, tmp_path):
         """`--allow-symlinks` flag should allow symlink destination directories."""
@@ -488,7 +488,7 @@ class TestAllowSymlinksFlag:
 
         # Should succeed
         assert result.exit_code == 0, f"Command failed: {result.output}"
-        assert "Security Error" not in result.output
+        assert "Security error" not in result.output
 
     def test_flag_allows_symlink_image_path(self, tmp_path):
         """`--allow-symlinks` flag should allow symlink as direct file path."""
@@ -514,4 +514,4 @@ class TestAllowSymlinksFlag:
 
         # Should succeed
         assert result.exit_code == 0, f"Command failed: {result.output}"
-        assert "Security Error" not in result.output
+        assert "Security error" not in result.output

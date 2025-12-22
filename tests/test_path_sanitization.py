@@ -348,7 +348,7 @@ class TestFetchErrorMessages:
         )
 
         assert result.exit_code == 1
-        assert "Failed to copy screenshot" in result.output
+        assert "Could not copy" in result.output
         assert "<...>/secret.png" in result.output
         assert "<...>/screenshot_" in result.output
         assert str(source) not in result.output

@@ -668,7 +668,7 @@ def test_fetch_error_message_mentions_source_directory(
 
     assert result.exit_code == 1
     assert "Source directory" in result.output
-    assert "does not exist" in result.output
+    assert "not found" in result.output
 
 
 def test_fetch_exits_when_destination_does_not_exist(
@@ -708,7 +708,7 @@ def test_fetch_error_message_mentions_destination_directory(
 
     assert result.exit_code == 1
     assert "Destination directory" in result.output
-    assert "does not exist" in result.output
+    assert "not found" in result.output
 
 
 # ============================================================================
@@ -829,7 +829,7 @@ def test_fetch_rejects_plain_text_cli_input(
     # Should fail with exit code 1
     assert result.exit_code == 1
     # Should show error message
-    assert "Invalid output format" in result.output
+    assert "Invalid `--output-style`" in result.output
     # Should list valid options
     assert "markdown" in result.output
     assert "html" in result.output
@@ -867,7 +867,7 @@ def test_fetch_rejects_plain_text_in_config(
     # Should fail with exit code 1
     assert result.exit_code == 1
     # Should show error message
-    assert "Invalid output format" in result.output
+    assert "Invalid `--output-style`" in result.output
     # Should list valid options
     assert "markdown" in result.output
     assert "html" in result.output
@@ -908,7 +908,7 @@ def test_fetch_suggests_closest_output_format(
     )
 
     assert result.exit_code == 1
-    assert "Invalid output format" in result.output
+    assert "Invalid `--output-style`" in result.output
     assert expected_suggestion in result.output
 
 
@@ -1240,7 +1240,7 @@ def test_fetch_exits_when_no_screenshots_found(
     )
 
     assert result.exit_code == 1
-    assert "No screenshot found" in result.output
+    assert "No screenshots found" in result.output
 
 
 def test_fetch_exits_when_requested_count_exceeds_available(
@@ -1261,7 +1261,8 @@ def test_fetch_exits_when_requested_count_exceeds_available(
     )
 
     assert result.exit_code == 1
-    assert "You requested 5 screenshot(s), but only 2 were found" in result.output
+    assert "Only 2 screenshot(s) found" in result.output
+    assert "you asked for 5" in result.output
 
 
 # ============================================================================

@@ -121,7 +121,7 @@ def test_get_git_root_error_message_is_informative(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    with pytest.raises(RuntimeError, match="Failed to get git root directory"):
+    with pytest.raises(RuntimeError, match="Could not determine the Git repository root"):
         cli.get_git_root()
 
 
@@ -447,7 +447,7 @@ def test_stage_screenshots_handles_called_process_error(
 
     # Should print warning for failed individual file
     captured = capsys.readouterr()
-    assert "Warning: Failed to stage screenshot" in captured.err
+    assert "Auto-staging failed" in captured.err
 
 
 def test_stage_screenshots_stages_multiple_files(
@@ -573,7 +573,7 @@ def test_stage_screenshots_partial_success_with_invalid_file(
 
     # Verify warning message for failed file
     captured = capsys.readouterr()
-    assert "Warning: Failed to stage screenshot" in captured.err
+    assert "Auto-staging failed" in captured.err
     assert "file2.png" in captured.err
 
     # All files should be attempted individually after batch fails
@@ -603,7 +603,7 @@ def test_stage_screenshots_reports_individual_failures(
 
     # Verify warning messages for all failed files
     captured = capsys.readouterr()
-    assert "Warning: Failed to stage screenshot" in captured.err
+    assert "Auto-staging failed" in captured.err
     assert "bad1.png" in captured.err
     assert "bad2.png" in captured.err
 

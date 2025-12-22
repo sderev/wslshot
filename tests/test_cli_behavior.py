@@ -198,7 +198,7 @@ def test_stage_screenshots_handles_git_failure(
     # Should not raise exception
     cli.stage_screenshots((Path("shot.png"),), git_root)
 
-    assert any("Failed to stage" in msg for msg in error_msgs)
+    assert any("Auto-staging failed" in msg for msg in error_msgs)
 
 
 def test_format_screenshots_path_for_git_empty_tuple(tmp_path: Path) -> None:

@@ -216,9 +216,10 @@ def test_print_formatted_path_invalid_format_exits_with_error(
     screenshots = (Path("assets/images/screenshot_abc123.png"),)
     cli.print_formatted_path("invalid_format", screenshots, relative_to_repo=True)
 
-    assert len(output_lines) == 1
-    assert output_lines[0]["msg"] == "Invalid output format: invalid_format"
-    assert output_lines[0]["err"] is True
+    assert len(output_lines) == 2
+    assert output_lines[0]["msg"] == "Error: Invalid `--output-style`: invalid_format"
+    assert output_lines[1]["msg"] == "Hint: Use one of: markdown, html, text."
+    assert all(line["err"] is True for line in output_lines)
     assert exit_codes == [1]
 
 
