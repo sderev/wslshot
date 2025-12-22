@@ -282,13 +282,18 @@ def atomic_write_json(path: Path, data: dict, mode: int = CONFIG_FILE_PERMISSION
     to ensure atomic rename (same filesystem). On POSIX systems,
     os.replace() is atomic.
 
+    Directory fsync is best-effort: if it fails after the atomic rename succeeds,
+    a warning is emitted but the function returns successfully. The config is
+    updated; only durability across power loss is not guaranteed.
+
     Args:
         path: Path to target file
         data: Dictionary to write as JSON
         mode: File permissions (default CONFIG_FILE_PERMISSIONS)
 
     Raises:
-        OSError: If write fails
+        OSError: If temp file creation or atomic rename fails.
+        TypeError/ValueError: If JSON encoding fails.
     """
     # Create temp file in same directory (ensures same filesystem)
     temp_fd, temp_path = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}_", suffix=".tmp")
@@ -306,7 +311,17 @@ def atomic_write_json(path: Path, data: dict, mode: int = CONFIG_FILE_PERMISSION
         # Atomic rename (POSIX guarantees atomicity)
         os.replace(temp_path, str(path))
 
-        # Ensure directory entry is durable
+    except Exception:
+        # Cleanup temp file on any error before rename
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+
+    # Best-effort directory fsync for durability
+    # Config is already updated; failure here only affects durability across power loss
+    try:
         dir_flags = os.O_RDONLY
         if hasattr(os, "O_DIRECTORY"):
             dir_flags |= os.O_DIRECTORY
@@ -315,29 +330,29 @@ def atomic_write_json(path: Path, data: dict, mode: int = CONFIG_FILE_PERMISSION
             os.fsync(dir_fd)
         finally:
             os.close(dir_fd)
-
-    except Exception:
-        # Cleanup temp file on any error
-        try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
-        raise
+    except OSError as error:
+        click.echo(
+            f"{WARNING_PREFIX} Config saved but durability not guaranteed: {error}",
+            err=True,
+        )
 
 
 def write_config_safely(config_file_path: Path, config_data: dict[str, object]) -> None:
     """
     Write configuration data while enforcing secure permissions.
 
-    Enforces CONFIG_FILE_PERMISSIONS before and after writes and rejects symlinked
-    config paths to prevent privilege escalation via symlink swaps.
+    Rejects symlinked config paths to prevent privilege escalation via symlink swaps.
+    Attempts to fix insecure permissions on existing files (best-effort); if chmod
+    fails, the atomic write is still attempted since it creates a fresh file with
+    correct permissions.
 
     Args:
         config_file_path: Path to config file
         config_data: Configuration dictionary to write
 
     Raises:
-        SecurityError: If the config path is a symlink or permissions cannot be fixed
+        SecurityError: If the config path is a symlink
+        OSError: If the atomic write fails
     """
     if config_file_path.is_symlink():
         raise SecurityError("Config file is a symlink; refusing to write for safety.")
@@ -353,8 +368,14 @@ def write_config_safely(config_file_path: Path, config_data: dict[str, object]) 
             try:
                 config_file_path.chmod(CONFIG_FILE_PERMISSIONS)
             except OSError as error:
+                # Best-effort: warn but proceed with atomic write
+                # The atomic replace will create a new file with correct permissions
                 sanitized = sanitize_error_message(str(error), (config_file_path,))
-                raise SecurityError(f"Failed to set secure permissions: {sanitized}") from error
+                click.echo(
+                    f"{WARNING_PREFIX} Could not fix permissions ({sanitized}); "
+                    "atomic write will replace with secure file.",
+                    err=True,
+                )
 
     atomic_write_json(config_file_path, config_data, mode=CONFIG_FILE_PERMISSIONS)
 

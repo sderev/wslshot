@@ -1409,3 +1409,106 @@ class TestConfigPermissionEnforcement:
 
         assert exit_codes == [1]
         assert any("Config file is a symlink" in str(msg) for msg in error_messages)
+
+    def test_chmod_failure_still_writes_with_correct_permissions(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """When chmod fails on existing file, atomic write still succeeds with 0o600."""
+        config_path = tmp_path / "config.json"
+        config_path.write_text('{"old": "data"}', encoding="UTF-8")
+        config_path.chmod(0o644)
+
+        # Mock Path.chmod to fail
+        original_chmod = Path.chmod
+
+        def failing_chmod(self: Path, mode: int) -> None:
+            if self == config_path:
+                raise OSError("Permission denied")
+            return original_chmod(self, mode)
+
+        monkeypatch.setattr(Path, "chmod", failing_chmod)
+
+        new_config = {"new": "data", "updated": True}
+        cli.write_config_safely(config_path, new_config)
+
+        # Verify config was written correctly
+        with open(config_path, "r", encoding="UTF-8") as f:
+            written_config = json.load(f)
+        assert written_config == new_config
+
+        # Verify final permissions are 0o600 (from atomic write's temp file)
+        assert (config_path.stat().st_mode & 0o777) == 0o600
+
+        # Verify warning was emitted
+        captured = capsys.readouterr()
+        assert "Could not fix permissions" in captured.err
+        assert "atomic write will replace" in captured.err
+
+
+class TestBestEffortDurability:
+    """Tests for best-effort directory fsync behavior."""
+
+    def test_directory_fsync_failure_warns_but_succeeds(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """When directory fsync fails, function warns but returns successfully."""
+        config_path = tmp_path / "config.json"
+        test_data = {"key": "value"}
+
+        fsync_call_count = [0]
+        original_fsync = os.fsync
+
+        def selective_failing_fsync(fd: int) -> None:
+            fsync_call_count[0] += 1
+            # atomic_write_json() calls fsync twice: first on the file, then on the directory.
+            # Fail only on directory fsync (second call).
+            if fsync_call_count[0] == 2:
+                raise OSError("Simulated directory fsync failure")
+            return original_fsync(fd)
+
+        monkeypatch.setattr(os, "fsync", selective_failing_fsync)
+
+        # Should not raise
+        cli.atomic_write_json(config_path, test_data)
+
+        # Verify data was written
+        with open(config_path, "r", encoding="UTF-8") as f:
+            written_data = json.load(f)
+        assert written_data == test_data
+
+        # Verify warning was emitted
+        captured = capsys.readouterr()
+        assert "durability not guaranteed" in captured.err
+
+    def test_directory_fsync_failure_does_not_corrupt_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When directory fsync fails, file content remains valid."""
+        config_path = tmp_path / "config.json"
+
+        # Write initial config
+        initial_data = {"initial": "data"}
+        cli.atomic_write_json(config_path, initial_data)
+
+        fsync_call_count = [0]
+        original_fsync = os.fsync
+
+        def selective_failing_fsync(fd: int) -> None:
+            fsync_call_count[0] += 1
+            # atomic_write_json() calls fsync twice: first on the file, then on the directory.
+            # Fail only on directory fsync (second call).
+            if fsync_call_count[0] == 2:
+                raise OSError("Simulated directory fsync failure")
+            return original_fsync(fd)
+
+        monkeypatch.setattr(os, "fsync", selective_failing_fsync)
+
+        # Update with new data
+        new_data = {"new": "data", "updated": True}
+        cli.atomic_write_json(config_path, new_data)
+
+        # Verify new data was written (not corrupted, not old data)
+        with open(config_path, "r", encoding="UTF-8") as f:
+            written_data = json.load(f)
+        assert written_data == new_data
+        assert "initial" not in written_data
