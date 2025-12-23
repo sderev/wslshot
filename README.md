@@ -2,7 +2,7 @@
 
 `wslshot` is a CLI tool designed to fetch the latest screenshot(s) from a shared directory with a Windows host, copy them to a designated directory in a Linux VM, and output their new Markdown-formatted paths.
 
-Simply take a screenshot using the Windows Snipping tool (`win + shift + S`), and then run `wslshot` in your terminal to effortlessly transfer the image.
+Take a screenshot using the Windows Snipping tool (`win + shift + S`), then run `wslshot` in your terminal to transfer the image.
 
 ![demo_0](https://github.com/sderev/wslshot/assets/24412384/656b0595-0c27-41fa-966a-d6ca39ec410a)
 
@@ -16,44 +16,26 @@ Simply take a screenshot using the Windows Snipping tool (`win + shift + S`), an
 1. [Windows Configuration](#windows-configuration)
     1. [For Windows 11 Users](#for-windows-11-users)
     1. [For Windows 10 Users](#for-windows-10-users)
-1. [Shared Folder Configuration](#shared-folder-configuration)
+1. [Shared Directory Configuration](#shared-directory-configuration)
     1. [For WSL Users](#for-wsl-users)
     1. [For Virtual Machine Users](#for-virtual-machine-users)
-1. [Configuration of `wslshot`](#configuration-of-wslshot)
+1. [Configuration](#configuration)
 1. [Fetching Screenshots](#fetching-screenshots)
-1. [Specifying an Image Path Instead of a Directory](#specifying-an-image-path-instead-of-a-directory)
+1. [Using a Specific Image Path](#using-a-specific-image-path)
     1. [Output](#output)
     1. [File Copy Behavior](#file-copy-behavior)
-1. [Integration in Vim](#integration-in-vim)
+1. [Vim Integration](#vim-integration)
 <!-- /TOC -->
 
 ## Features
 
 * Set a default source directory for screenshots.
 * Designate a custom source or destination directory per operation.
-  * Or automatically detect `/assets/images/` or other typical folders for this use case.
+  * Or automatically detect `/assets/images/` or other typical directories for this use case.
 * Fetch the most recent screenshot or specify a number of recent screenshots to fetch.
 * Control automatic staging of screenshots when copied to a git repository.
 * Convert screenshots to `png`, `jpg`/`jpeg`, `webp`, or `gif` during copy (flag or default).
 * Set a default output style (Markdown, HTML, text) and specify a custom style per operation.
-
-## Security
-
-`wslshot` enforces strict file validation to prevent security vulnerabilities:
-
-### File Validation
-
-* **Magic byte verification**: Only PNG, JPEG, GIF formats accepted
-* **Trailer validation**: Files with trailing payloads rejected
-* **Decompression bomb protection**: Images exceeding 89M pixels rejected
-
-### Size Limits
-
-* **Per-file limit**: 50MB maximum (configurable below, not above)
-* **Aggregate limit**: 200MB maximum (configurable below, not above)
-
-These limits are non-bypassable security controls. Users can configure lower limits via `wslshot configure`, but cannot exceed the hard ceilings. This prevents DoS attacks via oversized images or configuration manipulation.
-Non-positive aggregate limits fall back to the 200MB ceiling rather than disabling the check.
 
 ## Installation
 
@@ -73,7 +55,7 @@ uv tool install wslshot
 
 ## Windows Configuration
 
-Before using `wslshot`, you need to ensure that your screenshots are automatically saved to a folder accessible by your Linux environment.
+Before using `wslshot`, you need to ensure that your screenshots are automatically saved to a directory accessible by your Linux environment.
 
 ### For Windows 11 Users
 
@@ -89,32 +71,32 @@ The Snipping Tool in Windows 10 doesn't support automatic saving. However, you c
 
 1. **Use `Win + PrtScn`**: It captures the entire screen and saves to `C:\Users\[Your Username]\Pictures\Screenshots`.
 1. **Use `Win + Alt + PrtScn`**: It captures the active window and saves to `C:\Users\[Your Username]\Videos\Captures`.
-    * To unify the save folder, right-click on the `Captures` folder, select **Properties**, and set your desired folder in the **Location** tab.
+    * To unify the save directory, right-click on the `Captures` directory, select **Properties**, and set your desired directory in the **Location** tab.
 1. **Use a third-party tool**.
 
 You can still use the Snipping Tool, but you'll need to manually save each screenshot after capturing it.
 
-## Shared Folder Configuration
+## Shared Directory Configuration
 
 For `wslshot` to fetch screenshots from your Windows host, you need to set up a shared directory between your Windows host and your Linux VM.
 
 ### For WSL Users
 
-If you are using the Windows Subsystem for Linux (WSL), you can directly access your Windows file system from your WSL distro. The Windows `C:` drive, for example, can be found at `/mnt/c/` within your WSL environment. Therefore, you can directly use a folder on your Windows file system as the source directory for `wslshot`.
+If you are using the Windows Subsystem for Linux (WSL), you can directly access your Windows file system from your WSL distro. The Windows `C:` drive, for example, can be found at `/mnt/c/` within your WSL environment. Therefore, you can directly use a directory on your Windows file system as the source directory for `wslshot`.
 
 ### For Virtual Machine Users
 
-If you are using a traditional virtual machine managed by a hypervisor (e.g., VirtualBox, VMware, Hyper-V), you'll need to set up a shared folder with your Windows host and the Linux VM. The process varies depending on your hypervisor, but here are general steps:
+If you are using a traditional virtual machine managed by a hypervisor (e.g., VirtualBox, VMware, Hyper-V), you'll need to set up a shared directory with your Windows host and the Linux VM. The process varies depending on your hypervisor, but here are general steps:
 
-1. Choose a folder on your Windows host to use as your screenshot folder. This should be the same folder where you configured your Snipping Tool to automatically save screenshots.
-1. Go into your VM settings and locate the shared folders option. Add the chosen screenshot folder as a shared folder.
-1. Depending on your VM settings, this folder will now be available at a certain path in your Linux environment. Use this path as your source directory for `wslshot`.
+1. Choose a directory on your Windows host to use as your screenshot directory. This should be the same directory where you configured your Snipping Tool to automatically save screenshots.
+1. Go into your VM settings and locate the shared directories option. Add the chosen screenshot directory as a shared directory.
+1. Depending on your VM settings, this directory will now be available at a certain path in your Linux environment. Use this path as your source directory for `wslshot`.
 
-Remember to consult the documentation of your hypervisor for specific instructions on how to set up shared folders.
+Remember to consult the documentation of your hypervisor for specific instructions on how to set up shared directories.
 
-## Configuration of `wslshot`
+## Configuration
 
-Before using `wslshot`, you may want to configure it to suit your needs. You can do this using the `configure` command:
+Configure `wslshot` to suit your needs using the `configure` command:
 
 ```bash
 wslshot configure [--source /path] [--destination /path] [--auto-stage-enabled True] [--output-style HTML] [--convert-to png]
@@ -132,7 +114,7 @@ This command allows you to set various options:
 
 * **`--convert-to` or `-c`**: Set the default image conversion format. Supported formats: png, jpg, jpeg, webp, gif. Conversion runs after copying; the converted file replaces the copied original. `jpeg` is treated as `jpg`. A CLI `--convert-to` flag overrides this default.
 
-Remember, these are just the default settings. You can override these settings on a per-operation basis by providing the corresponding options when running the `wslshot` command.
+These are default settings. Override them on a per-operation basis by providing the corresponding options when running the `wslshot` command.
 
 ## Fetching Screenshots
 
@@ -142,9 +124,9 @@ Remember, these are just the default settings. You can override these settings o
 wslshot
 ```
 
-This will fetch the most recent screenshots from the source directory. If this command is run inside a git repository, it will create the folder `/assets/images` (if it doesn't exist) and copy the screenshot to it.
+This fetches the most recent screenshot from the source directory. If run inside a git repository, it creates the directory `/assets/images` (if it doesn't exist) and copies the screenshot to it.
 
-**These are the folders automatically detected for the copy**:
+**These are the directories automatically detected for the copy**:
 
 - `/assets/img/`
 - `/assets/images/`
@@ -157,7 +139,7 @@ This will fetch the most recent screenshots from the source directory. If this c
 wslshot -n 3
 ```
 
-This will fetch the three most recent screenshots.
+This fetches the three most recent screenshots.
 
 **Convert screenshots to a different format**:
 
@@ -181,9 +163,9 @@ WARNING: Only use with trusted paths. By default, `wslshot` rejects symlinks for
 wslshot [--source /custom/source] [--destination /custom/destination] [--count 3] [--output-style HTML] [--convert-to png] [--allow-symlinks]
 ```
 
-## Specifying an Image Path Instead of a Directory
+## Using a Specific Image Path
 
-To utilize this feature, provide the path to the image you'd like to copy as an argument when running the `wslshot` command:
+Provide the path to a specific image as an argument:
 
 ```bash
 wslshot /mnt/c/user/my_name/Images/magic.gif
@@ -193,7 +175,7 @@ Note that you can _drag and drop_ a file into the Windows Terminal to automatica
 
 ### Output
 
-Upon success, the command will output the new path of the image in Markdown format:
+Upon success, the command outputs the new path in Markdown format:
 
 ```bash
 ![{uuid}.gif](/assets/images/{uuid}.gif)
@@ -201,11 +183,11 @@ Upon success, the command will output the new path of the image in Markdown form
 
 ### File Copy Behavior
 
-As with the standard usage of `wslshot`, the specified image will be copied to your designated folder on the Linux VM.
+The specified image is copied to your designated directory on the Linux VM.
 
-## Integration in Vim
+## Vim Integration
 
-If `wslshot` is in your PATH, you can easily call it with a shebang command.
+If `wslshot` is in your PATH, call it with a shebang command:
 
 ```vim
 :.!wslshot
