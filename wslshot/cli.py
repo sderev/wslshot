@@ -35,7 +35,7 @@ import click
 from click_default_group import DefaultGroup
 from PIL import Image
 
-from wslshot.exceptions import ScreenshotNotFoundError, SecurityError
+from wslshot.exceptions import GitError, ScreenshotNotFoundError, SecurityError
 
 # CLI message prefixes (styled, user-facing)
 SECURITY_ERROR_PREFIX = click.style("Security error:", fg="red")
@@ -950,7 +950,19 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
 
     # Destination directory
     if destination is None:
-        destination = get_destination()
+        try:
+            destination = get_destination()
+        except GitError as error:
+            click.secho(f"Error: {error}", fg="red", err=True)
+            sys.exit(1)
+        except SecurityError as error:
+            click.echo(f"{SECURITY_ERROR_PREFIX} {error}", err=True)
+            error_msg = str(error).lower()
+            if "symlink" in error_msg:
+                click.echo("Hint: Remove the symlink and try again.", err=True)
+            elif "different user" in error_msg:
+                click.echo("Hint: Check directory ownership or use a different path.", err=True)
+            sys.exit(1)
 
     try:
         destination = resolve_path_safely(destination, check_symlink=not allow_symlinks)
@@ -1069,7 +1081,7 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
     if is_git_repo():
         try:
             git_root = get_git_root()
-        except RuntimeError as error:
+        except GitError as error:
             click.secho(f"Error: {error}", fg="red", err=True)
         else:
             relative_screenshots = format_screenshots_path_for_git(copied_screenshots, git_root)
@@ -1808,6 +1820,10 @@ def get_destination() -> Path:
 
     Returns:
         The destination directory.
+
+    Raises:
+        GitError: If inside a Git repo and git root cannot be determined.
+        SecurityError: If inside a Git repo and directory creation fails due to security violation.
     """
     if is_git_repo():
         return get_git_repo_img_destination()
@@ -1842,6 +1858,9 @@ def is_git_repo() -> bool:
 def get_git_root() -> Path:
     """
     Get the absolute path to the current git repository root.
+
+    Raises:
+        GitError: If the git repository root cannot be determined.
     """
     try:
         git_root_bytes = subprocess.run(
@@ -1851,7 +1870,7 @@ def get_git_root() -> Path:
             stderr=subprocess.PIPE,
         ).stdout
     except subprocess.CalledProcessError as error:
-        raise RuntimeError("Could not determine the Git repository root.") from error
+        raise GitError("Could not determine the Git repository root.") from error
 
     return Path(git_root_bytes.strip().decode("utf-8")).resolve()
 
@@ -1862,12 +1881,12 @@ def get_git_repo_img_destination() -> Path:
 
     Returns:
         The destination directory for a Git repository.
+
+    Raises:
+        GitError: If git root cannot be determined.
+        SecurityError: If directory creation fails due to security violation.
     """
-    try:
-        git_root = get_git_root()
-    except RuntimeError as error:
-        click.secho(f"Error: {error}", fg="red", err=True)
-        sys.exit(1)
+    git_root = get_git_root()
 
     for relative_parts in GIT_IMAGE_DIRECTORY_PRIORITY:
         candidate = git_root.joinpath(*relative_parts)
@@ -1875,18 +1894,9 @@ def get_git_repo_img_destination() -> Path:
             return candidate
 
     destination = git_root.joinpath(*GIT_IMAGE_DIRECTORY_PRIORITY[-1])
-    try:
-        # Skip permission hardening for git-tracked directories since they may
-        # be intentionally group-writable in shared repositories (umask 0002)
-        create_directory_safely(destination, mode=0o755, harden_permissions=False)
-    except SecurityError as error:
-        click.echo(f"{SECURITY_ERROR_PREFIX} {error}", err=True)
-        error_msg = str(error).lower()
-        if "symlink" in error_msg:
-            click.echo("Hint: Remove the symlink and try again.", err=True)
-        elif "different user" in error_msg:
-            click.echo("Hint: Check directory ownership or use a different path.", err=True)
-        sys.exit(1)
+    # Skip permission hardening for git-tracked directories since they may
+    # be intentionally group-writable in shared repositories (umask 0002)
+    create_directory_safely(destination, mode=0o755, harden_permissions=False)
     return destination
 
 

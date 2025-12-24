@@ -25,6 +25,7 @@ from click.testing import CliRunner
 from conftest import create_test_image
 
 from wslshot import cli
+from wslshot.exceptions import GitError
 
 # ============================================================================
 # Fixtures and Helpers
@@ -1143,12 +1144,12 @@ def test_fetch_handles_get_git_root_error_gracefully(
     config_file: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test handles get_git_root() RuntimeError gracefully."""
+    """Test handles get_git_root() GitError gracefully."""
     create_screenshot(source_dir, "screenshot.png")
 
     monkeypatch.setattr(cli, "is_git_repo", lambda: True)
     monkeypatch.setattr(
-        cli, "get_git_root", lambda: (_ for _ in ()).throw(RuntimeError("Git root not found"))
+        cli, "get_git_root", lambda: (_ for _ in ()).throw(GitError("Git root not found"))
     )
 
     result = runner.invoke(

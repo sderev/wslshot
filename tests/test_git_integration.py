@@ -7,6 +7,7 @@ from subprocess import CalledProcessError, CompletedProcess
 import pytest
 
 from wslshot import cli
+from wslshot.exceptions import GitError
 
 # ============================================================================
 # Repository Detection Tests
@@ -99,8 +100,8 @@ def test_get_git_root_handles_trailing_newline(monkeypatch: pytest.MonkeyPatch) 
     assert "\n" not in str(result)
 
 
-def test_get_git_root_raises_runtime_error_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test get_git_root() raises RuntimeError when git command fails."""
+def test_get_git_root_raises_git_error_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test get_git_root() raises GitError when git command fails."""
 
     def fake_run(cmd, check, stdout, stderr):
         """Mock subprocess.run to raise CalledProcessError."""
@@ -108,12 +109,12 @@ def test_get_git_root_raises_runtime_error_on_failure(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(GitError):
         cli.get_git_root()
 
 
 def test_get_git_root_error_message_is_informative(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test get_git_root() raises RuntimeError with informative error message."""
+    """Test get_git_root() raises GitError with informative error message."""
 
     def fake_run(cmd, check, stdout, stderr):
         """Mock subprocess.run to raise CalledProcessError."""
@@ -121,7 +122,7 @@ def test_get_git_root_error_message_is_informative(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    with pytest.raises(RuntimeError, match="Could not determine the Git repository root"):
+    with pytest.raises(GitError, match="Could not determine the Git repository root"):
         cli.get_git_root()
 
 
