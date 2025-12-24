@@ -1456,6 +1456,48 @@ def get_config_file_path_or_exit(*, create_if_missing: bool = True) -> Path:
         sys.exit(1)
 
 
+def validate_config(raw_config: dict[str, object]) -> dict[str, object]:
+    """
+    Validate configuration against schema and normalize values.
+
+    Uses CONFIG_FIELD_SPECS to validate types and values. Missing keys
+    are filled with defaults. Unknown keys trigger a warning.
+
+    Args:
+        raw_config: Raw config dictionary from JSON
+
+    Returns:
+        Validated config with all required keys
+
+    Raises:
+        ConfigurationError: If a value fails validation
+    """
+    validated: dict[str, object] = {}
+
+    # Check for unknown keys (potential typos)
+    known_keys = set(CONFIG_FIELD_SPECS.keys())
+    unknown_keys = set(raw_config.keys()) - known_keys
+    if unknown_keys:
+        click.echo(
+            f"{WARNING_PREFIX} Unknown config keys ignored: {', '.join(sorted(unknown_keys))}",
+            err=True,
+        )
+
+    # Validate each expected field
+    for field, spec in CONFIG_FIELD_SPECS.items():
+        if field not in raw_config:
+            # Use default for missing fields
+            validated[field] = spec.default
+            continue
+
+        try:
+            validated[field] = spec.normalize(raw_config[field])
+        except (TypeError, ValueError, FileNotFoundError) as error:
+            raise ConfigurationError(f"Invalid value for '{field}': {error}") from error
+
+    return validated
+
+
 def read_config(config_file_path: Path) -> dict[str, object]:
     """
     Read the configuration file.
