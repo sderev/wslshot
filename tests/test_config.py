@@ -1487,3 +1487,151 @@ class TestBestEffortDurability:
             written_data = json.load(f)
         assert written_data == new_data
         assert "initial" not in written_data
+
+
+class TestValidateConfig:
+    """Tests for validate_config() function."""
+
+    def test_validate_config_with_valid_config(self, tmp_path: Path) -> None:
+        """Test that valid config passes validation and is normalized."""
+        source_dir = tmp_path / "source"
+        dest_dir = tmp_path / "dest"
+        source_dir.mkdir()
+        dest_dir.mkdir()
+
+        raw_config = {
+            "default_source": str(source_dir),
+            "default_destination": str(dest_dir),
+            "auto_stage_enabled": True,
+            "default_output_format": "HTML",  # Mixed case
+            "default_convert_to": ".PNG",  # With dot
+            "max_file_size_mb": 25,
+            "max_total_size_mb": 100,
+        }
+
+        result = cli.validate_config(raw_config)
+
+        # Paths are resolved to absolute paths
+        assert result["default_source"] == str(source_dir.resolve())
+        assert result["default_destination"] == str(dest_dir.resolve())
+        assert result["auto_stage_enabled"] is True
+        # Values are normalized
+        assert result["default_output_format"] == "html"
+        assert result["default_convert_to"] == "png"
+        assert result["max_file_size_mb"] == 25
+        assert result["max_total_size_mb"] == 100
+
+    def test_validate_config_fills_missing_with_defaults(self) -> None:
+        """Test that missing keys are filled with defaults."""
+        raw_config: dict[str, object] = {}
+
+        result = cli.validate_config(raw_config)
+
+        assert result["default_source"] == ""
+        assert result["default_destination"] == ""
+        assert result["auto_stage_enabled"] is False
+        assert result["default_output_format"] == "markdown"
+        assert result["default_convert_to"] is None
+        assert result["max_file_size_mb"] == 50
+        assert result["max_total_size_mb"] == 200
+
+    def test_validate_config_warns_unknown_keys(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Test that unknown keys trigger a warning."""
+        raw_config = {
+            "unknwon_key": "value",  # Typo
+            "another_unknown": 123,
+        }
+
+        cli.validate_config(raw_config)
+
+        captured = capsys.readouterr()
+        assert "Warning:" in captured.err
+        assert "Unknown config keys ignored" in captured.err
+        assert "another_unknown" in captured.err
+        assert "unknwon_key" in captured.err
+
+    def test_validate_config_raises_on_invalid_type(self) -> None:
+        """Test that wrong type raises ConfigurationError."""
+        raw_config = {
+            "auto_stage_enabled": "not_a_bool",  # Invalid: wrong type
+        }
+
+        with pytest.raises(ConfigurationError, match="Invalid value for 'auto_stage_enabled'"):
+            cli.validate_config(raw_config)
+
+    def test_validate_config_raises_on_invalid_value(self) -> None:
+        """Test that invalid value raises ConfigurationError."""
+        raw_config = {
+            "default_output_format": "invalid_format",
+        }
+
+        with pytest.raises(ConfigurationError, match="Invalid value for 'default_output_format'"):
+            cli.validate_config(raw_config)
+
+    def test_validate_config_allows_nonexistent_paths_with_warning(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test that non-existent directory paths are allowed with a warning."""
+        nonexistent_source = tmp_path / "does_not_exist_source"
+        nonexistent_dest = tmp_path / "does_not_exist_dest"
+
+        raw_config = {
+            "default_source": str(nonexistent_source),
+            "default_destination": str(nonexistent_dest),
+        }
+
+        result = cli.validate_config(raw_config)
+
+        # Paths are preserved as-is (not rejected)
+        assert result["default_source"] == str(nonexistent_source)
+        assert result["default_destination"] == str(nonexistent_dest)
+
+        # Warnings were issued
+        captured = capsys.readouterr()
+        assert "Warning:" in captured.err
+        assert "default source does not exist" in captured.err
+        assert "default destination does not exist" in captured.err
+
+    def test_validate_config_empty_path_uses_default(self) -> None:
+        """Test that empty path strings use default (empty string)."""
+        raw_config = {
+            "default_source": "",
+            "default_destination": "   ",  # Whitespace only
+        }
+
+        result = cli.validate_config(raw_config)
+
+        assert result["default_source"] == ""
+        assert result["default_destination"] == ""
+
+    def test_read_config_validates_and_autofix(
+        self, fake_home: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that invalid config is auto-fixed by recreating with defaults."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+
+        # Write config with invalid value
+        invalid_config = {
+            "default_output_format": 12345,  # Wrong type: int instead of str
+        }
+        config_file.write_text(json.dumps(invalid_config), encoding="UTF-8")
+
+        # Non-interactive mode: should reset to defaults
+        monkeypatch.setattr(cli, "_is_interactive_terminal", lambda: False)
+
+        result = cli.read_config(config_file)
+
+        # Should return defaults after auto-fix
+        assert result == cli.DEFAULT_CONFIG
+
+        # Config file should be reset to defaults
+        with open(config_file, "r", encoding="UTF-8") as f:
+            written_config = json.load(f)
+        assert written_config == cli.DEFAULT_CONFIG
+
+        # Original should be backed up
+        backup_file = config_file.with_name(f"{config_file.name}.corrupted")
+        assert backup_file.exists()
+        with open(backup_file, "r", encoding="UTF-8") as f:
+            backup_config = json.load(f)
+        assert backup_config == invalid_config
