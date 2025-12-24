@@ -93,9 +93,16 @@ class TestReadConfig:
     def test_read_config_with_valid_json(self, fake_home: Path, tmp_path: Path) -> None:
         """Test reading a valid JSON configuration file."""
         config_file = fake_home / ".config" / "wslshot" / "config.json"
+
+        # Create directories so paths are valid
+        source_dir = tmp_path / "source"
+        dest_dir = tmp_path / "dest"
+        source_dir.mkdir()
+        dest_dir.mkdir()
+
         config_data = {
-            "default_source": str(tmp_path / "source"),
-            "default_destination": str(tmp_path / "dest"),
+            "default_source": str(source_dir),
+            "default_destination": str(dest_dir),
             "auto_stage_enabled": True,
             "default_output_format": "html",
         }
@@ -104,7 +111,16 @@ class TestReadConfig:
             json.dump(config_data, f)
 
         result = cli.read_config(config_file)
-        assert result == config_data
+
+        # Validation normalizes paths and fills missing defaults
+        assert result["default_source"] == str(source_dir.resolve())
+        assert result["default_destination"] == str(dest_dir.resolve())
+        assert result["auto_stage_enabled"] is True
+        assert result["default_output_format"] == "html"
+        # Missing fields are filled with defaults
+        assert result["default_convert_to"] is None
+        assert result["max_file_size_mb"] == 50
+        assert result["max_total_size_mb"] == 200
 
     def test_read_config_with_empty_file_non_interactive_replaces_with_defaults(
         self, fake_home: Path, monkeypatch: pytest.MonkeyPatch

@@ -1463,6 +1463,10 @@ def validate_config(raw_config: dict[str, object]) -> dict[str, object]:
     Uses CONFIG_FIELD_SPECS to validate types and values. Missing keys
     are filled with defaults. Unknown keys trigger a warning.
 
+    For directory paths (default_source, default_destination), non-existent
+    paths are allowed with a warning, not an error. The user might configure
+    paths that will be created later.
+
     Args:
         raw_config: Raw config dictionary from JSON
 
@@ -1470,9 +1474,12 @@ def validate_config(raw_config: dict[str, object]) -> dict[str, object]:
         Validated config with all required keys
 
     Raises:
-        ConfigurationError: If a value fails validation
+        ConfigurationError: If a value fails validation (except path existence)
     """
     validated: dict[str, object] = {}
+
+    # Fields where non-existent paths are allowed (warn, don't fail)
+    path_fields = {"default_source", "default_destination"}
 
     # Check for unknown keys (potential typos)
     known_keys = set(CONFIG_FIELD_SPECS.keys())
@@ -1492,7 +1499,24 @@ def validate_config(raw_config: dict[str, object]) -> dict[str, object]:
 
         try:
             validated[field] = spec.normalize(raw_config[field])
-        except (TypeError, ValueError, FileNotFoundError) as error:
+        except FileNotFoundError:
+            # For path fields, non-existent paths are allowed with a warning
+            if field in path_fields:
+                raw_value = raw_config[field]
+                if isinstance(raw_value, str) and raw_value.strip():
+                    click.echo(
+                        f"{WARNING_PREFIX} Configured {field.replace('_', ' ')} does not exist: "
+                        f"{sanitize_path_for_error(raw_value)}",
+                        err=True,
+                    )
+                    validated[field] = raw_value
+                else:
+                    validated[field] = spec.default
+            else:
+                raise ConfigurationError(
+                    f"Invalid value for '{field}': path does not exist"
+                ) from None
+        except (TypeError, ValueError) as error:
             raise ConfigurationError(f"Invalid value for '{field}': {error}") from error
 
     return validated
@@ -1513,9 +1537,10 @@ def read_config(config_file_path: Path) -> dict[str, object]:
     """
     try:
         with open(config_file_path, "r", encoding="UTF-8") as file:
-            config = json.load(file)
+            raw_config = json.load(file)
+        config = validate_config(raw_config)
 
-    except json.JSONDecodeError as error:
+    except (json.JSONDecodeError, ConfigurationError) as error:
         if _is_interactive_terminal():
             click.echo(
                 f"{WARNING_PREFIX} Config file {sanitize_path_for_error(config_file_path)} is corrupted ({error}). "
