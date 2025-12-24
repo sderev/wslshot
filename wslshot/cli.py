@@ -29,7 +29,7 @@ import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from stat import S_ISREG
+from stat import S_ISDIR, S_ISLNK, S_ISREG
 
 import click
 from click_default_group import DefaultGroup
@@ -447,6 +447,167 @@ def resolve_path_safely(path_str: str, check_symlink: bool = True) -> Path:
     resolved = path.resolve(strict=True)
 
     return resolved
+
+
+def create_directory_safely(
+    directory: Path, mode: int = 0o755, *, harden_permissions: bool = True
+) -> Path:
+    """
+    Create directory with TOCTOU protection.
+
+    Creates parent directories iteratively with validation between each step
+    to prevent TOCTOU race conditions. Verifies directories are not symlinks,
+    owned by current user, and have appropriate permissions.
+
+    Permission Policy:
+        When `harden_permissions=True`, this function prevents *insecure*
+        permissions (group/other writable, i.e., 0o022 bits set) but does not
+        enforce the exact `mode`. For example, an existing 0o755 directory will
+        not be tightened to 0o700 since 0o755 is already secure.
+
+    Args:
+        directory: Directory path to create
+        mode: Permission mode for new directories (default 0o755)
+        harden_permissions: If True (default), fix group/other writable
+            permissions on the target directory. Set to False for shared
+            directories like git-tracked image folders where group-write
+            may be intentional.
+
+    Returns:
+        The created or verified directory path
+
+    Raises:
+        SecurityError: If symlink detected or ownership mismatch
+
+    Note:
+        On non-POSIX systems (e.g., Windows), ownership validation is skipped
+        since `os.getuid()` is not available.
+    """
+    # Get absolute path
+    directory = directory.absolute()
+
+    # Build list of all path components from root to target
+    # We need to validate from shallowest to deepest to prevent TOCTOU
+    components = []
+    current = directory
+    while current != current.parent:
+        components.append(current)
+        current = current.parent
+    components.reverse()  # Now ordered from root to target
+
+    # Track which directories we create (vs already existed)
+    created_dirs = set()
+
+    # Check if ownership validation is available (POSIX-only)
+    # On Windows, os.getuid() doesn't exist; skip ownership checks there
+    can_check_ownership = hasattr(os, "getuid")
+
+    # Create directories one-by-one with validation between each
+    # This prevents TOCTOU attacks during mkdir(parents=True)
+    for idx, component in enumerate(components):
+        # Use lstat to check existence without following symlinks
+        # Also detect existing symlinks in the same syscall
+        try:
+            pre_stat = component.lstat()
+            existed_before = True
+            # Pre-creation check: detect existing symlinks
+            if S_ISLNK(pre_stat.st_mode):
+                raise SecurityError(f"Path contains symlink: {sanitize_path_for_error(component)}")
+        except FileNotFoundError:
+            existed_before = False
+
+        if not existed_before:
+            try:
+                component.mkdir(mode=mode, exist_ok=False)
+                created_dirs.add(component)
+            except FileExistsError:
+                # Race condition: directory created between lstat() and mkdir()
+                # Fall through to post-creation validation
+                pass
+
+        # Post-creation validation using lstat (does not follow symlinks)
+        # This is the critical security check that replaces is_symlink() + is_dir()
+        try:
+            stat_info = component.lstat()
+        except FileNotFoundError as err:
+            raise SecurityError(
+                f"Path disappeared during creation: {sanitize_path_for_error(component)}"
+            ) from err
+
+        # Check if it's a symlink using the already-fetched stat_info
+        # This avoids a TOCTOU race between lstat() and a separate is_symlink() call
+        if S_ISLNK(stat_info.st_mode):
+            raise SecurityError(f"Path is a symlink: {sanitize_path_for_error(component)}")
+
+        # Use S_ISDIR on lstat result to verify it's a directory without following symlinks
+        if not S_ISDIR(stat_info.st_mode):
+            raise SecurityError(
+                f"Path exists but is not a directory: {sanitize_path_for_error(component)}"
+            )
+
+        # Re-validate all parent components to catch TOCTOU attacks
+        # An attacker might replace an earlier parent with a symlink
+        for parent_idx in range(idx):
+            parent = components[parent_idx]
+            try:
+                parent_stat = parent.lstat()
+                if S_ISLNK(parent_stat.st_mode):
+                    raise SecurityError(
+                        f"Parent path became symlink: {sanitize_path_for_error(parent)}"
+                    )
+            except FileNotFoundError as err:
+                raise SecurityError(
+                    f"Parent path disappeared: {sanitize_path_for_error(parent)}"
+                ) from err
+
+        # Perform ownership validation for directories we created or the final target
+        # Skip ownership check for pre-existing system directories (e.g., /tmp, /home)
+        if can_check_ownership and (component in created_dirs or component == directory):
+            if stat_info.st_uid != os.getuid():
+                raise SecurityError(
+                    f"Directory owned by different user (UID {stat_info.st_uid}): "
+                    f"{sanitize_path_for_error(component)}"
+                )
+
+        # For the final target directory only, optionally fix unsafe permissions
+        if harden_permissions and component == directory:
+            current_mode = stat_info.st_mode & FILE_PERMISSION_MASK
+            if current_mode & 0o022:
+                click.echo(
+                    f"{WARNING_PREFIX} Directory has unsafe permissions ({oct(current_mode)}). "
+                    f"Fixing to {oct(mode)}.",
+                    err=True,
+                )
+                # Re-check symlink before chmod to close TOCTOU window
+                # Use lstat + S_ISLNK for consistency with other checks
+                try:
+                    pre_chmod_stat = directory.lstat()
+                    if S_ISLNK(pre_chmod_stat.st_mode):
+                        raise SecurityError(
+                            f"Path became symlink before chmod: {sanitize_path_for_error(directory)}"
+                        )
+                except FileNotFoundError as err:
+                    raise SecurityError(
+                        f"Path disappeared before chmod: {sanitize_path_for_error(directory)}"
+                    ) from err
+                try:
+                    # Use follow_symlinks=False to prevent symlink dereferencing
+                    directory.chmod(mode, follow_symlinks=False)
+                except NotImplementedError as err:
+                    # On Linux, chmod with follow_symlinks=False fails on symlinks.
+                    # This indicates a TOCTOU race: path became a symlink after our check.
+                    raise SecurityError(
+                        f"Path became symlink during chmod: {sanitize_path_for_error(directory)}"
+                    ) from err
+                except OSError as error:
+                    # Best-effort: warn but proceed since ownership check passed
+                    sanitized = sanitize_error_message(str(error), (directory,))
+                    click.echo(
+                        f"{WARNING_PREFIX} Could not fix directory permissions: {sanitized}",
+                        err=True,
+                    )
+
+    return directory
 
 
 def sanitize_path_for_error(path: str | Path, *, show_basename: bool = True) -> str:
@@ -1259,7 +1420,7 @@ def get_config_file_path(*, create_if_missing: bool = True) -> Path:
         raise SecurityError("Config file is a symlink; refusing to use it.")
 
     if create_if_missing:
-        config_file_path.parent.mkdir(parents=True, exist_ok=True, mode=CONFIG_DIR_PERMISSIONS)
+        create_directory_safely(config_file_path.parent, mode=CONFIG_DIR_PERMISSIONS)
 
         if not config_file_path.exists():
             # Write default config without interactive prompts
@@ -1274,7 +1435,11 @@ def get_config_file_path_or_exit(*, create_if_missing: bool = True) -> Path:
         return get_config_file_path(create_if_missing=create_if_missing)
     except SecurityError as error:
         click.echo(f"{SECURITY_ERROR_PREFIX} {error}", err=True)
-        click.echo("Hint: Remove the symlink and rerun `wslshot configure`.", err=True)
+        error_msg = str(error).lower()
+        if "symlink" in error_msg:
+            click.echo("Hint: Remove the symlink and rerun `wslshot configure`.", err=True)
+        elif "different user" in error_msg:
+            click.echo("Hint: Check directory ownership or use a different path.", err=True)
         sys.exit(1)
 
 
@@ -1317,7 +1482,7 @@ def read_config(config_file_path: Path) -> dict[str, object]:
 
         _backup_corrupted_file_or_warn(config_file_path)
 
-        config_file_path.parent.mkdir(parents=True, exist_ok=True, mode=CONFIG_DIR_PERMISSIONS)
+        create_directory_safely(config_file_path.parent, mode=CONFIG_DIR_PERMISSIONS)
         config = DEFAULT_CONFIG.copy()
         write_config_or_exit(config_file_path, config)
 
@@ -1715,7 +1880,18 @@ def get_git_repo_img_destination() -> Path:
             return candidate
 
     destination = git_root.joinpath(*GIT_IMAGE_DIRECTORY_PRIORITY[-1])
-    destination.mkdir(parents=True, exist_ok=True)
+    try:
+        # Skip permission hardening for git-tracked directories since they may
+        # be intentionally group-writable in shared repositories (umask 0002)
+        create_directory_safely(destination, mode=0o755, harden_permissions=False)
+    except SecurityError as error:
+        click.echo(f"{SECURITY_ERROR_PREFIX} {error}", err=True)
+        error_msg = str(error).lower()
+        if "symlink" in error_msg:
+            click.echo("Hint: Remove the symlink and try again.", err=True)
+        elif "different user" in error_msg:
+            click.echo("Hint: Check directory ownership or use a different path.", err=True)
+        sys.exit(1)
     return destination
 
 

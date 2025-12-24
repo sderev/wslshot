@@ -1,8 +1,11 @@
 """
-Tests for security hardening features (PERSO-270).
+Tests for security hardening features.
 
-Tests decompression bomb protection and non-bypassable size limit enforcement.
+Tests decompression bomb protection, non-bypassable size limit enforcement,
+and TOCTOU race condition protection.
 """
+
+import os
 
 import pytest
 from PIL import Image
@@ -11,6 +14,8 @@ from wslshot.cli import (
     HARD_MAX_FILE_SIZE_BYTES,
     HARD_MAX_TOTAL_SIZE_BYTES,
     MAX_IMAGE_PIXELS,
+    SecurityError,
+    create_directory_safely,
     get_size_limits,
     validate_image_file,
 )
@@ -302,3 +307,383 @@ class TestIntegrationSecurityHardening:
         img.save(img_path)
 
         assert validate_image_file(img_path) is True
+
+
+class TestToctouProtection:
+    """Tests for TOCTOU race condition protection (CWE-367)."""
+
+    def test_creates_new_directory(self, tmp_path):
+        """New directory should be created with specified permissions."""
+        new_dir = tmp_path / "new_directory"
+        old_umask = os.umask(0)
+        try:
+            result = create_directory_safely(new_dir, mode=0o700)
+        finally:
+            os.umask(old_umask)
+
+        assert result == new_dir
+        assert new_dir.exists()
+        assert new_dir.is_dir()
+        assert (new_dir.stat().st_mode & 0o777) == 0o700
+
+    def test_creates_nested_directories(self, tmp_path):
+        """Nested directories should be created."""
+        nested_dir = tmp_path / "level1" / "level2" / "level3"
+        result = create_directory_safely(nested_dir, mode=0o755)
+
+        assert result == nested_dir
+        assert nested_dir.exists()
+        assert nested_dir.is_dir()
+
+    def test_accepts_existing_safe_directory(self, tmp_path):
+        """Existing directory owned by current user should be accepted."""
+        existing_dir = tmp_path / "existing"
+        existing_dir.mkdir(mode=0o755)
+
+        result = create_directory_safely(existing_dir, mode=0o755)
+
+        assert result == existing_dir
+        assert existing_dir.exists()
+
+    def test_rejects_symlink_directory(self, tmp_path):
+        """Symlinked directory should be rejected."""
+        real_dir = tmp_path / "real"
+        real_dir.mkdir()
+        symlink_dir = tmp_path / "symlink"
+        symlink_dir.symlink_to(real_dir)
+
+        with pytest.raises(SecurityError) as exc_info:
+            create_directory_safely(symlink_dir, mode=0o755)
+
+        assert "symlink" in str(exc_info.value).lower()
+
+    def test_rejects_broken_symlink(self, tmp_path):
+        """Broken symlink (pointing to non-existent target) should be rejected."""
+        broken_symlink = tmp_path / "broken_link"
+        broken_symlink.symlink_to("/nonexistent/path")
+
+        with pytest.raises(SecurityError) as exc_info:
+            create_directory_safely(broken_symlink, mode=0o755)
+
+        assert "symlink" in str(exc_info.value).lower()
+
+    def test_rejects_file_at_path(self, tmp_path):
+        """File at directory path should be rejected."""
+        file_path = tmp_path / "not_a_dir"
+        file_path.write_text("content")
+
+        with pytest.raises(SecurityError) as exc_info:
+            create_directory_safely(file_path, mode=0o755)
+
+        assert "not a directory" in str(exc_info.value).lower()
+
+    def test_rejects_directory_wrong_owner(self, tmp_path, monkeypatch):
+        """Directory owned by different user should be rejected."""
+        # Skip on non-POSIX systems where os.getuid() is not available
+        if not hasattr(os, "getuid"):
+            pytest.skip("os.getuid() not available on this platform")
+
+        # Skip if running as root (cannot test ownership restrictions)
+        if os.getuid() == 0:
+            pytest.skip("Cannot test ownership restrictions as root")
+
+        # Create a directory that appears to be owned by a different user
+        # We'll mock this by checking the SecurityError path
+        # In practice, this would require root to create a different-owner dir
+        existing_dir = tmp_path / "existing"
+        existing_dir.mkdir(mode=0o755)
+
+        # Patch os.getuid to return a different value
+        original_uid = os.getuid()
+        monkeypatch.setattr(os, "getuid", lambda: original_uid + 1)
+
+        with pytest.raises(SecurityError) as exc_info:
+            create_directory_safely(existing_dir, mode=0o755)
+
+        assert "different user" in str(exc_info.value).lower()
+
+    def test_fixes_unsafe_directory_permissions(self, tmp_path, capsys):
+        """Directories with unsafe permissions should be fixed."""
+        insecure_dir = tmp_path / "insecure"
+        old_umask = os.umask(0)
+        try:
+            insecure_dir.mkdir(mode=0o777)
+        finally:
+            os.umask(old_umask)
+
+        result = create_directory_safely(insecure_dir, mode=0o700)
+
+        assert result == insecure_dir
+        assert (insecure_dir.stat().st_mode & 0o777) == 0o700
+
+        captured = capsys.readouterr()
+        assert "unsafe permissions" in captured.err.lower()
+        assert "0o777" in captured.err
+
+    def test_does_not_warn_for_safe_permissions(self, tmp_path, capsys):
+        """No warning for directories with safe permissions."""
+        safe_dir = tmp_path / "safe"
+        safe_dir.mkdir(mode=0o700)
+
+        create_directory_safely(safe_dir, mode=0o700)
+
+        captured = capsys.readouterr()
+        assert "unsafe" not in captured.err.lower()
+
+    def test_group_writable_is_unsafe(self, tmp_path, capsys):
+        """Group-writable permissions should be fixed."""
+        group_write_dir = tmp_path / "group_write"
+        old_umask = os.umask(0)
+        try:
+            group_write_dir.mkdir(mode=0o770)
+        finally:
+            os.umask(old_umask)
+
+        create_directory_safely(group_write_dir, mode=0o700)
+
+        assert (group_write_dir.stat().st_mode & 0o777) == 0o700
+        captured = capsys.readouterr()
+        assert "unsafe permissions" in captured.err.lower()
+
+    def test_other_writable_is_unsafe(self, tmp_path, capsys):
+        """Other-writable permissions should be fixed."""
+        other_write_dir = tmp_path / "other_write"
+        old_umask = os.umask(0)
+        try:
+            other_write_dir.mkdir(mode=0o707)
+        finally:
+            os.umask(old_umask)
+
+        create_directory_safely(other_write_dir, mode=0o700)
+
+        assert (other_write_dir.stat().st_mode & 0o777) == 0o700
+        captured = capsys.readouterr()
+        assert "unsafe permissions" in captured.err.lower()
+
+    def test_default_mode_is_755(self, tmp_path):
+        """Default mode should be 0o755."""
+        new_dir = tmp_path / "default_mode"
+        old_umask = os.umask(0)
+        try:
+            create_directory_safely(new_dir)
+        finally:
+            os.umask(old_umask)
+
+        assert (new_dir.stat().st_mode & 0o777) == 0o755
+
+    def test_chmod_failure_is_best_effort(self, tmp_path, capsys, monkeypatch):
+        """chmod failure should warn but not raise an exception."""
+        insecure_dir = tmp_path / "chmod_fail"
+        old_umask = os.umask(0)
+        try:
+            insecure_dir.mkdir(mode=0o777)
+        finally:
+            os.umask(old_umask)
+
+        # Simulate chmod failure by monkeypatching
+        def failing_chmod(self_path, mode, *, follow_symlinks=True):
+            raise OSError("Simulated permission denied")
+
+        monkeypatch.setattr(type(insecure_dir), "chmod", failing_chmod)
+
+        # Should NOT raise an exception
+        result = create_directory_safely(insecure_dir, mode=0o700)
+
+        assert result == insecure_dir
+        captured = capsys.readouterr()
+        assert "could not fix directory permissions" in captured.err.lower()
+
+    def test_stat_does_not_follow_symlinks(self, tmp_path):
+        """Verification that stat() does not follow symlinks (prevents TOCTOU)."""
+        # Create a real directory with different ownership simulation
+        real_dir = tmp_path / "real"
+        real_dir.mkdir(mode=0o755)
+
+        # Create a symlink pointing to the real directory
+        symlink_dir = tmp_path / "symlink"
+        symlink_dir.symlink_to(real_dir)
+
+        # The function should reject the symlink, not follow it
+        with pytest.raises(SecurityError) as exc_info:
+            create_directory_safely(symlink_dir, mode=0o755)
+
+        assert "symlink" in str(exc_info.value).lower()
+
+        # Verify the real directory was not modified
+        assert real_dir.exists()
+        assert real_dir.is_dir()
+
+    def test_rejects_symlink_in_parent_path(self, tmp_path):
+        """Symlink in parent directory chain should be rejected."""
+        # Create real directory
+        real_parent = tmp_path / "real_parent"
+        real_parent.mkdir()
+
+        # Create symlink to real parent
+        symlink_parent = tmp_path / "symlink_parent"
+        symlink_parent.symlink_to(real_parent)
+
+        # Try to create child under symlinked parent
+        child_dir = symlink_parent / "child"
+
+        with pytest.raises(SecurityError) as exc_info:
+            create_directory_safely(child_dir, mode=0o755)
+
+        assert "symlink" in str(exc_info.value).lower()
+
+        # Verify no directory was created in the real location
+        assert not (real_parent / "child").exists()
+
+    def test_rejects_newly_created_directory_wrong_owner(self, tmp_path, monkeypatch):
+        """Newly created directories are ownership-checked even with pre-existing parents."""
+        # Skip on non-POSIX systems where os.getuid() is not available
+        if not hasattr(os, "getuid"):
+            pytest.skip("os.getuid() not available on this platform")
+
+        # Skip if running as root (cannot test ownership restrictions)
+        if os.getuid() == 0:
+            pytest.skip("Cannot test ownership restrictions as root")
+
+        # Create intermediate directory (pre-existing, not ownership-checked)
+        intermediate = tmp_path / "intermediate"
+        intermediate.mkdir(mode=0o755)
+
+        # Patch os.getuid to simulate wrong ownership for newly created dirs
+        original_uid = os.getuid()
+        monkeypatch.setattr(os, "getuid", lambda: original_uid + 1)
+
+        # Try to create nested path - should fail on newly created nested dir
+        nested = intermediate / "nested"
+        with pytest.raises(SecurityError) as exc_info:
+            create_directory_safely(nested, mode=0o755)
+
+        assert "different user" in str(exc_info.value).lower()
+
+    def test_harden_permissions_false_skips_permission_fixing(self, tmp_path, capsys):
+        """harden_permissions=False should skip permission hardening."""
+        insecure_dir = tmp_path / "insecure"
+        old_umask = os.umask(0)
+        try:
+            insecure_dir.mkdir(mode=0o777)
+        finally:
+            os.umask(old_umask)
+
+        # With harden_permissions=False, permissions should NOT be changed
+        result = create_directory_safely(insecure_dir, mode=0o700, harden_permissions=False)
+
+        assert result == insecure_dir
+        # Permissions should remain unchanged
+        assert (insecure_dir.stat().st_mode & 0o777) == 0o777
+
+        captured = capsys.readouterr()
+        # No warning should be printed
+        assert "unsafe permissions" not in captured.err.lower()
+
+    def test_chmod_notimplementederror_is_caught(self, tmp_path, monkeypatch):
+        """NotImplementedError during chmod (TOCTOU race) should raise SecurityError."""
+        insecure_dir = tmp_path / "race_condition"
+        old_umask = os.umask(0)
+        try:
+            insecure_dir.mkdir(mode=0o777)
+        finally:
+            os.umask(old_umask)
+
+        # Simulate the scenario where path becomes a symlink during chmod
+        # On Linux, chmod(follow_symlinks=False) on a symlink raises NotImplementedError
+        def race_chmod(self_path, mode, *, follow_symlinks=True):
+            if not follow_symlinks:
+                raise NotImplementedError("chmod: follow_symlinks unavailable on this platform")
+            return None
+
+        monkeypatch.setattr(type(insecure_dir), "chmod", race_chmod)
+
+        with pytest.raises(SecurityError) as exc_info:
+            create_directory_safely(insecure_dir, mode=0o700)
+
+        assert "symlink" in str(exc_info.value).lower()
+
+    def test_path_disappears_during_creation(self, tmp_path, monkeypatch):
+        """Path disappearing between mkdir and lstat should raise SecurityError."""
+        target_dir = tmp_path / "disappearing"
+
+        # Keep track of calls to lstat to simulate race condition
+        original_lstat = type(target_dir).lstat
+        lstat_calls = []
+
+        def racing_lstat(self_path):
+            lstat_calls.append(str(self_path))
+            # First lstat (existence check) returns FileNotFoundError
+            # mkdir succeeds
+            # Second lstat (post-creation validation) raises FileNotFoundError
+            # (simulating directory removal between mkdir and lstat)
+            if (
+                str(self_path) == str(target_dir)
+                and len([c for c in lstat_calls if c == str(self_path)]) > 1
+            ):
+                raise FileNotFoundError("Path disappeared")
+            return original_lstat(self_path)
+
+        monkeypatch.setattr(type(target_dir), "lstat", racing_lstat)
+
+        with pytest.raises(SecurityError) as exc_info:
+            create_directory_safely(target_dir, mode=0o755)
+
+        assert "disappeared" in str(exc_info.value).lower()
+
+    def test_path_disappears_before_chmod(self, tmp_path, monkeypatch):
+        """Path disappearing before chmod should raise SecurityError."""
+        insecure_dir = tmp_path / "disappearing_chmod"
+        old_umask = os.umask(0)
+        try:
+            insecure_dir.mkdir(mode=0o777)
+        finally:
+            os.umask(old_umask)
+
+        # Track lstat calls to make it disappear at the right moment
+        original_lstat = type(insecure_dir).lstat
+        lstat_call_count = [0]
+
+        def racing_lstat(self_path):
+            if str(self_path) == str(insecure_dir):
+                lstat_call_count[0] += 1
+                # First lstat (pre-creation check) - exists
+                # Second lstat (post-creation validation) - exists
+                # Third lstat (pre-chmod check) - disappears
+                if lstat_call_count[0] >= 3:
+                    raise FileNotFoundError("Path disappeared before chmod")
+            return original_lstat(self_path)
+
+        monkeypatch.setattr(type(insecure_dir), "lstat", racing_lstat)
+
+        with pytest.raises(SecurityError) as exc_info:
+            create_directory_safely(insecure_dir, mode=0o700)
+
+        assert "disappeared" in str(exc_info.value).lower()
+        assert "chmod" in str(exc_info.value).lower()
+
+    def test_parent_disappears_during_validation(self, tmp_path, monkeypatch):
+        """Parent path disappearing during re-validation should raise SecurityError."""
+        # Create a nested structure
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir(mode=0o755)
+        child_dir = parent_dir / "child"
+
+        original_lstat = type(parent_dir).lstat
+        lstat_call_count = [0]
+
+        def racing_lstat(self_path):
+            if str(self_path) == str(parent_dir):
+                lstat_call_count[0] += 1
+                # First call (pre-creation check on parent) - exists
+                # Second call (post-creation validation on parent) - exists
+                # Third call (re-validation during child processing) - disappears
+                if lstat_call_count[0] >= 3:
+                    raise FileNotFoundError("Parent disappeared")
+            return original_lstat(self_path)
+
+        monkeypatch.setattr(type(parent_dir), "lstat", racing_lstat)
+
+        with pytest.raises(SecurityError) as exc_info:
+            create_directory_safely(child_dir, mode=0o755)
+
+        assert "disappeared" in str(exc_info.value).lower()
