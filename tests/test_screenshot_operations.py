@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 from uuid import UUID
 
@@ -9,6 +8,7 @@ import pytest
 from conftest import create_test_image
 
 from wslshot import cli
+from wslshot.exceptions import ScreenshotNotFoundError
 
 # ==================== Finding Screenshots Tests ====================
 
@@ -262,44 +262,17 @@ def test_get_screenshots_case_insensitive_all_formats(tmp_path: Path) -> None:
     assert set(result) == set(test_files)
 
 
-def test_get_screenshots_raises_error_when_no_screenshots_found(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Test that get_screenshots raises ValueError with appropriate message when no screenshots exist."""
+def test_get_screenshots_raises_error_when_no_screenshots_found(tmp_path: Path) -> None:
+    """Test that get_screenshots raises ScreenshotNotFoundError when no screenshots exist."""
     source = tmp_path / "source"
     source.mkdir()
 
-    # Mock sys.exit to capture the exit call
-    exit_code = []
-
-    def mock_exit(code):
-        exit_code.append(code)
-        raise SystemExit(code)
-
-    monkeypatch.setattr(sys, "exit", mock_exit)
-
-    # Mock click.echo to capture error messages
-    error_messages = []
-
-    def mock_echo(msg=None, err=False, **kwargs):
-        if err and msg is not None:
-            error_messages.append(msg)
-
-    monkeypatch.setattr(cli.click, "echo", mock_echo)
-    monkeypatch.setattr(cli.click, "secho", mock_echo)
-
-    # Test that it raises SystemExit
-    with pytest.raises(SystemExit):
+    with pytest.raises(ScreenshotNotFoundError, match="No screenshots found"):
         cli.get_screenshots(source, count=1)
 
-    assert exit_code == [1]
-    assert any("No screenshots found" in msg for msg in error_messages)
 
-
-def test_get_screenshots_raises_error_when_count_exceeds_available(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Test that get_screenshots raises ValueError when requested count exceeds available files."""
+def test_get_screenshots_raises_error_when_count_exceeds_available(tmp_path: Path) -> None:
+    """Test that get_screenshots raises ScreenshotNotFoundError when count exceeds available files."""
     source = tmp_path / "source"
     source.mkdir()
 
@@ -308,33 +281,13 @@ def test_get_screenshots_raises_error_when_count_exceeds_available(
         screenshot = source / f"screenshot_{i}.png"
         create_test_image(screenshot)
 
-    # Mock sys.exit to capture the exit call
-    exit_code = []
-
-    def mock_exit(code):
-        exit_code.append(code)
-        raise SystemExit(code)
-
-    monkeypatch.setattr(sys, "exit", mock_exit)
-
-    # Mock click.echo to capture error messages
-    error_messages = []
-
-    def mock_echo(msg=None, err=False, **kwargs):
-        if err and msg is not None:
-            error_messages.append(msg)
-
-    monkeypatch.setattr(cli.click, "echo", mock_echo)
-    monkeypatch.setattr(cli.click, "secho", mock_echo)
-
     # Try to get 5 screenshots when only 2 exist
-    with pytest.raises(SystemExit):
+    with pytest.raises(ScreenshotNotFoundError) as exc_info:
         cli.get_screenshots(source, count=5)
 
-    assert exit_code == [1]
     # Verify the error message mentions both requested and found counts
-    assert any("Only 2 screenshot(s) found" in msg for msg in error_messages)
-    assert any("you asked for 5" in msg for msg in error_messages)
+    assert "Only 2 screenshot(s) found" in str(exc_info.value)
+    assert "you asked for 5" in str(exc_info.value)
 
 
 # ==================== Copying Screenshots Tests ====================
@@ -712,8 +665,8 @@ def test_get_screenshots_count_exceeds_available(tmp_path: Path) -> None:
     for i in range(3):
         create_test_image(source / f"screenshot_{i}.png")
 
-    # Request 5 files (more than available) - should exit with error
-    with pytest.raises(SystemExit):
+    # Request 5 files (more than available) - should raise ScreenshotNotFoundError
+    with pytest.raises(ScreenshotNotFoundError):
         cli.get_screenshots(source, count=5)
 
 
@@ -722,6 +675,6 @@ def test_get_screenshots_empty_directory(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
 
-    # No screenshots in directory - should exit with error
-    with pytest.raises(SystemExit):
+    # No screenshots in directory - should raise ScreenshotNotFoundError
+    with pytest.raises(ScreenshotNotFoundError):
         cli.get_screenshots(source, count=1)

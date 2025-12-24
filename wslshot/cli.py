@@ -35,7 +35,7 @@ import click
 from click_default_group import DefaultGroup
 from PIL import Image
 
-from wslshot.exceptions import SecurityError
+from wslshot.exceptions import ScreenshotNotFoundError, SecurityError
 
 # CLI message prefixes (styled, user-facing)
 SECURITY_ERROR_PREFIX = click.style("Security error:", fg="red")
@@ -1031,7 +1031,14 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
             sys.exit(1)
     else:
         # Copy the screenshot(s) to the destination directory.
-        source_screenshots = get_screenshots(source, count, max_file_size_bytes=max_file_size_bytes)
+        try:
+            source_screenshots = get_screenshots(
+                source, count, max_file_size_bytes=max_file_size_bytes
+            )
+        except ScreenshotNotFoundError as error:
+            click.secho(f"Error: {error}", fg="red", err=True)
+            click.echo("Hint: Set `--source` or run `wslshot configure`.", err=True)
+            sys.exit(1)
         try:
             copied_screenshots = copy_screenshots(
                 source_screenshots,
@@ -1129,28 +1136,18 @@ def get_screenshots(
         sanitized_source = sanitize_path_for_error(source)
 
         if len(screenshots) == 0:
-            click.secho(
-                f"Error: No screenshots found in {sanitized_source}",
-                fg="red",
-                err=True,
-            )
-            click.echo("Hint: Set `--source` or run `wslshot configure`.", err=True)
-            sys.exit(1)
+            raise ScreenshotNotFoundError(f"No screenshots found in {sanitized_source}")
 
         if len(screenshots) < count:
-            click.secho(
-                f"Error: Only {len(screenshots)} screenshot(s) found in {sanitized_source}, "
-                f"but you asked for {count}.",
-                fg="red",
-                err=True,
+            raise ScreenshotNotFoundError(
+                f"Only {len(screenshots)} screenshot(s) found in {sanitized_source}, "
+                f"but you asked for {count}"
             )
-            click.echo("Hint: Lower `--count` or check the source directory.", err=True)
-            sys.exit(1)
     except OSError as error:
         sanitized_error = format_path_error(error)
-        click.secho(f"Error: {sanitized_error}", fg="red", err=True)
-        click.echo(f"Source directory: {sanitize_path_for_error(source)}", err=True)
-        sys.exit(1)
+        raise ScreenshotNotFoundError(
+            f"{sanitized_error} (source: {sanitize_path_for_error(source)})"
+        ) from error
 
     return tuple(screenshots)
 

@@ -23,6 +23,7 @@ from wslshot.cli import (
     sanitize_error_message,
     sanitize_path_for_error,
 )
+from wslshot.exceptions import ScreenshotNotFoundError
 
 
 class TestSanitizePathForError:
@@ -384,8 +385,8 @@ class TestSanitizeErrorMessage:
 class TestGetScreenshotsErrors:
     """Ensure get_screenshots redacts filesystem paths on OS errors."""
 
-    def test_permission_error_masks_source_directory(self, tmp_path: Path, capsys, monkeypatch):
-        """PermissionError during directory scan should redact the source path."""
+    def test_permission_error_masks_source_directory(self, tmp_path: Path, monkeypatch):
+        """PermissionError during directory scan should redact the source path in exception."""
         source = tmp_path / "very" / "private" / "screens"
         source.mkdir(parents=True)
 
@@ -394,14 +395,14 @@ class TestGetScreenshotsErrors:
 
         monkeypatch.setattr("wslshot.cli.os.scandir", fail_scandir)
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(ScreenshotNotFoundError) as exc_info:
             get_screenshots(str(source), 1)
 
-        err_output = capsys.readouterr().err
-        assert "Permission denied" in err_output
-        assert "<...>/screens" in err_output
-        assert str(source) not in err_output
-        assert str(tmp_path) not in err_output
+        error_message = str(exc_info.value)
+        assert "Permission denied" in error_message
+        assert "<...>/screens" in error_message
+        assert str(source) not in error_message
+        assert str(tmp_path) not in error_message
 
 
 class TestCopyAndConvertSanitization:
