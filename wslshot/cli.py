@@ -35,7 +35,13 @@ import click
 from click_default_group import DefaultGroup
 from PIL import Image
 
-from wslshot.exceptions import GitError, ScreenshotNotFoundError, SecurityError
+from wslshot.exceptions import (
+    ConfigurationError,
+    GitError,
+    ScreenshotNotFoundError,
+    SecurityError,
+    ValidationError,
+)
 
 # CLI message prefixes (styled, user-facing)
 SECURITY_ERROR_PREFIX = click.style("Security error:", fg="red")
@@ -1768,6 +1774,10 @@ def set_default_source(source_str: str) -> None:
 
     Args:
         source_str: The default source directory.
+
+    Raises:
+        SecurityError: If path contains symlinks (rejected for security).
+        ConfigurationError: If the source directory is invalid.
     """
     if not source_str.strip():
         source = ""
@@ -1776,12 +1786,10 @@ def set_default_source(source_str: str) -> None:
             source = str(resolve_path_safely(source_str))
         except ValueError as error:
             sanitized_msg = format_path_error(error)
-            click.echo(f"{SECURITY_ERROR_PREFIX} {sanitized_msg}", err=True)
-            sys.exit(1)
+            raise SecurityError(sanitized_msg) from error
         except FileNotFoundError as error:
             sanitized_msg = format_path_error(error)
-            click.secho(f"Error: Invalid source directory: {sanitized_msg}", fg="red", err=True)
-            sys.exit(1)
+            raise ConfigurationError(f"Invalid source directory: {sanitized_msg}") from error
 
     _write_config_field("default_source", source)
 
@@ -1792,6 +1800,10 @@ def set_default_destination(destination_str: str) -> None:
 
     Args:
         destination_str: The default destination directory.
+
+    Raises:
+        SecurityError: If path contains symlinks (rejected for security).
+        ConfigurationError: If the destination directory is invalid.
     """
     if not destination_str.strip():
         destination = ""
@@ -1800,16 +1812,10 @@ def set_default_destination(destination_str: str) -> None:
             destination = str(resolve_path_safely(destination_str))
         except ValueError as error:
             sanitized_msg = format_path_error(error)
-            click.echo(f"{SECURITY_ERROR_PREFIX} {sanitized_msg}", err=True)
-            sys.exit(1)
+            raise SecurityError(sanitized_msg) from error
         except FileNotFoundError as error:
             sanitized_msg = format_path_error(error)
-            click.secho(
-                f"Error: Invalid destination directory: {sanitized_msg}",
-                fg="red",
-                err=True,
-            )
-            sys.exit(1)
+            raise ConfigurationError(f"Invalid destination directory: {sanitized_msg}") from error
 
     _write_config_field("default_destination", destination)
 
@@ -1916,16 +1922,17 @@ def set_default_output_format(output_format: str) -> None:
 
     Args:
         output_format: The default output format.
+
+    Raises:
+        ValidationError: If the output format is not valid.
     """
     if output_format.casefold() not in VALID_OUTPUT_FORMATS:
-        click.secho(f"Error: Invalid `--output-style`: {output_format}", fg="red", err=True)
         valid_options = ", ".join(VALID_OUTPUT_FORMATS)
         suggestion = suggest_format(output_format, list(VALID_OUTPUT_FORMATS))
-        hint = f"Hint: Use one of: {valid_options}."
+        message = f"Invalid `--output-style`: {output_format}. Use one of: {valid_options}."
         if suggestion:
-            hint = f"{hint} {suggestion}"
-        click.echo(hint, err=True)
-        sys.exit(1)
+            message = f"{message} {suggestion}"
+        raise ValidationError(message)
 
     _write_config_field("default_output_format", output_format.casefold())
 
@@ -1936,12 +1943,14 @@ def set_default_convert_to(convert_format: str | None) -> None:
 
     Args:
         convert_format: The default conversion format (png, jpg/jpeg, webp, gif, or None).
+
+    Raises:
+        ValidationError: If the conversion format is not valid.
     """
     try:
         normalized_convert_format = normalize_default_convert_to(convert_format)
     except (TypeError, ValueError) as error:
-        click.secho(f"Error: {error}", fg="red", err=True)
-        sys.exit(1)
+        raise ValidationError(str(error)) from error
 
     _write_config_field("default_convert_to", normalized_convert_format)
 
@@ -1985,22 +1994,30 @@ def configure(source, destination, auto_stage_enabled, output_format, convert_to
     # When no options are specified, ask the user for their preferences.
     if all(x is None for x in (source, destination, auto_stage_enabled, output_format, convert_to)):
         write_config(get_config_file_path_or_exit())
+        return
 
     # Otherwise, set the specified options.
-    if source:
-        set_default_source(source)
+    try:
+        if source:
+            set_default_source(source)
 
-    if destination:
-        set_default_destination(destination)
+        if destination:
+            set_default_destination(destination)
 
-    if auto_stage_enabled is not None:
-        set_auto_stage(auto_stage_enabled)
+        if auto_stage_enabled is not None:
+            set_auto_stage(auto_stage_enabled)
 
-    if output_format:
-        set_default_output_format(output_format)
+        if output_format:
+            set_default_output_format(output_format)
 
-    if convert_to is not None:
-        set_default_convert_to(convert_to)
+        if convert_to is not None:
+            set_default_convert_to(convert_to)
+    except SecurityError as error:
+        click.echo(f"{SECURITY_ERROR_PREFIX} {error}", err=True)
+        sys.exit(1)
+    except (ConfigurationError, ValidationError) as error:
+        click.secho(f"Error: {error}", fg="red", err=True)
+        sys.exit(1)
 
 
 @wslshot.command(name="migrate-config")

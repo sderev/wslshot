@@ -11,6 +11,7 @@ import click
 import pytest
 
 from wslshot import cli
+from wslshot.exceptions import ConfigurationError, SecurityError, ValidationError
 
 
 class TestGetConfigFilePath:
@@ -481,42 +482,17 @@ class TestSetDefaultSource:
 
         assert config["default_source"] == str(source_dir.resolve())
 
-    def test_set_default_source_with_invalid_directory_exits(
+    def test_set_default_source_with_invalid_directory_raises_error(
         self, fake_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that set_default_source exits with code 1 for invalid directory."""
+        """Test that set_default_source raises ConfigurationError for invalid directory."""
         config_file = fake_home / ".config" / "wslshot" / "config.json"
         config_file.write_text("{}")
 
-        exit_codes: list[int] = []
-
-        def mock_exit(code: int) -> None:
-            exit_codes.append(code)
-            raise SystemExit(code)
-
-        monkeypatch.setattr(sys, "exit", mock_exit)
-
-        error_messages: list[str] = []
-        monkeypatch.setattr(
-            "click.echo",
-            lambda msg=None, **kwargs: error_messages.append(msg)
-            if msg and kwargs.get("err")
-            else None,
-        )
-        monkeypatch.setattr(
-            "click.secho",
-            lambda msg=None, **kwargs: error_messages.append(msg)
-            if msg and kwargs.get("err")
-            else None,
-        )
-
         invalid_dir = tmp_path / "nonexistent"
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(ConfigurationError, match="Invalid source directory"):
             cli.set_default_source(str(invalid_dir))
-
-        assert exit_codes == [1]
-        assert any("Invalid source directory" in str(msg) for msg in error_messages)
 
     def test_set_default_source_preserves_other_config_fields(
         self, fake_home: Path, tmp_path: Path
@@ -565,6 +541,34 @@ class TestSetDefaultSource:
         assert config["auto_stage_enabled"] == initial_config["auto_stage_enabled"]
         assert config["default_output_format"] == initial_config["default_output_format"]
 
+    def test_set_default_source_with_symlink_raises_security_error(
+        self, fake_home: Path, tmp_path: Path
+    ) -> None:
+        """set_default_source raises SecurityError for symlink paths."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        config_file.write_text(
+            json.dumps(
+                {
+                    "default_source": "",
+                    "default_destination": "",
+                    "auto_stage_enabled": False,
+                    "default_output_format": "markdown",
+                    "default_convert_to": None,
+                    "max_file_size_mb": 50,
+                    "max_total_size_mb": 200,
+                }
+            ),
+            encoding="UTF-8",
+        )
+
+        real_dir = tmp_path / "real"
+        real_dir.mkdir()
+        symlink_dir = tmp_path / "link"
+        symlink_dir.symlink_to(real_dir)
+
+        with pytest.raises(SecurityError):
+            cli.set_default_source(str(symlink_dir))
+
 
 class TestSetDefaultDestination:
     """Tests for set_default_destination() function."""
@@ -594,42 +598,17 @@ class TestSetDefaultDestination:
 
         assert config["default_destination"] == str(dest_dir.resolve())
 
-    def test_set_default_destination_with_invalid_directory_exits(
+    def test_set_default_destination_with_invalid_directory_raises_error(
         self, fake_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that set_default_destination exits with code 1 for invalid directory."""
+        """Test that set_default_destination raises ConfigurationError for invalid directory."""
         config_file = fake_home / ".config" / "wslshot" / "config.json"
         config_file.write_text("{}")
 
-        exit_codes: list[int] = []
-
-        def mock_exit(code: int) -> None:
-            exit_codes.append(code)
-            raise SystemExit(code)
-
-        monkeypatch.setattr(sys, "exit", mock_exit)
-
-        error_messages: list[str] = []
-        monkeypatch.setattr(
-            "click.echo",
-            lambda msg=None, **kwargs: error_messages.append(msg)
-            if msg and kwargs.get("err")
-            else None,
-        )
-        monkeypatch.setattr(
-            "click.secho",
-            lambda msg=None, **kwargs: error_messages.append(msg)
-            if msg and kwargs.get("err")
-            else None,
-        )
-
         invalid_dir = tmp_path / "nonexistent"
 
-        with pytest.raises(SystemExit):
+        with pytest.raises(ConfigurationError, match="Invalid destination directory"):
             cli.set_default_destination(str(invalid_dir))
-
-        assert exit_codes == [1]
-        assert any("Invalid destination directory" in str(msg) for msg in error_messages)
 
     def test_set_default_destination_allows_blank_to_clear(self, fake_home: Path) -> None:
         """Test that set_default_destination can clear the configured value with blank input."""
@@ -650,6 +629,34 @@ class TestSetDefaultDestination:
         assert config["default_source"] == initial_config["default_source"]
         assert config["auto_stage_enabled"] == initial_config["auto_stage_enabled"]
         assert config["default_output_format"] == initial_config["default_output_format"]
+
+    def test_set_default_destination_with_symlink_raises_security_error(
+        self, fake_home: Path, tmp_path: Path
+    ) -> None:
+        """set_default_destination raises SecurityError for symlink paths."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        config_file.write_text(
+            json.dumps(
+                {
+                    "default_source": "",
+                    "default_destination": "",
+                    "auto_stage_enabled": False,
+                    "default_output_format": "markdown",
+                    "default_convert_to": None,
+                    "max_file_size_mb": 50,
+                    "max_total_size_mb": 200,
+                }
+            ),
+            encoding="UTF-8",
+        )
+
+        real_dir = tmp_path / "real"
+        real_dir.mkdir()
+        symlink_dir = tmp_path / "link"
+        symlink_dir.symlink_to(real_dir)
+
+        with pytest.raises(SecurityError):
+            cli.set_default_destination(str(symlink_dir))
 
 
 class TestSetAutoStage:
@@ -759,41 +766,18 @@ class TestSetDefaultOutputFormat:
 
         assert config["default_output_format"] == "html"
 
-    def test_set_default_output_format_invalid_exits(
+    def test_set_default_output_format_invalid_raises_error(
         self, fake_home: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that set_default_output_format exits with code 1 for invalid format."""
+        """Test that set_default_output_format raises ValidationError for invalid format."""
         config_file = fake_home / ".config" / "wslshot" / "config.json"
         config_file.write_text('{"default_output_format": "markdown"}')
 
-        exit_codes: list[int] = []
-
-        def mock_exit(code: int) -> None:
-            exit_codes.append(code)
-            raise SystemExit(code)
-
-        monkeypatch.setattr(sys, "exit", mock_exit)
-
-        error_messages: list[str] = []
-        monkeypatch.setattr(
-            "click.echo",
-            lambda msg=None, **kwargs: error_messages.append(msg)
-            if msg and kwargs.get("err")
-            else None,
-        )
-        monkeypatch.setattr(
-            "click.secho",
-            lambda msg=None, **kwargs: error_messages.append(msg)
-            if msg and kwargs.get("err")
-            else None,
-        )
-
-        with pytest.raises(SystemExit):
+        with pytest.raises(ValidationError) as exc_info:
             cli.set_default_output_format("invalid_format")
 
-        assert exit_codes == [1]
-        assert any("Invalid `--output-style`" in str(msg) for msg in error_messages)
-        assert any("Use one of: markdown, html, text." in str(msg) for msg in error_messages)
+        assert "Invalid `--output-style`" in str(exc_info.value)
+        assert "Use one of: markdown, html, text." in str(exc_info.value)
 
 
 class TestSetDefaultConvertTo:
@@ -814,40 +798,15 @@ class TestSetDefaultConvertTo:
         config = json.loads(config_file.read_text(encoding="UTF-8"))
         assert config["default_convert_to"] is None
 
-    def test_set_default_convert_to_invalid_exits(
+    def test_set_default_convert_to_invalid_raises_error(
         self, fake_home: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that set_default_convert_to exits with code 1 for invalid formats."""
+        """Test that set_default_convert_to raises ValidationError for invalid formats."""
         config_file = fake_home / ".config" / "wslshot" / "config.json"
         config_file.write_text(json.dumps({"default_convert_to": None}), encoding="UTF-8")
 
-        exit_codes: list[int] = []
-
-        def mock_exit(code: int) -> None:
-            exit_codes.append(code)
-            raise SystemExit(code)
-
-        monkeypatch.setattr(sys, "exit", mock_exit)
-
-        error_messages: list[str] = []
-        monkeypatch.setattr(
-            "click.echo",
-            lambda msg=None, **kwargs: error_messages.append(msg)
-            if msg and kwargs.get("err")
-            else None,
-        )
-        monkeypatch.setattr(
-            "click.secho",
-            lambda msg=None, **kwargs: error_messages.append(msg)
-            if msg and kwargs.get("err")
-            else None,
-        )
-
-        with pytest.raises(SystemExit):
+        with pytest.raises(ValidationError, match="Invalid `--convert-to`"):
             cli.set_default_convert_to("tiff")
-
-        assert exit_codes == [1]
-        assert any("Invalid `--convert-to`" in str(msg) for msg in error_messages)
 
 
 class TestGetConfigInput:
