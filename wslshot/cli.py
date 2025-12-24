@@ -35,13 +35,11 @@ import click
 from click_default_group import DefaultGroup
 from PIL import Image
 
+from wslshot.exceptions import SecurityError
+
 # CLI message prefixes (styled, user-facing)
 SECURITY_ERROR_PREFIX = click.style("Security error:", fg="red")
 WARNING_PREFIX = click.style("Warning:", fg="yellow")
-
-
-class SecurityError(Exception):
-    """Security-related error."""
 
 
 # ============================================================================
