@@ -1,6 +1,6 @@
 # Windows Screenshot for Linux
 
-`wslshot` is a CLI tool designed to fetch the latest screenshot(s) from a shared directory with a Windows host, copy them to a designated directory in a Linux VM, and output their new Markdown-formatted paths.
+`wslshot` is a CLI tool designed to fetch the latest screenshot(s) from a directory shared with a Windows host, copy them to a designated directory in a Linux VM, and output their new Markdown-formatted paths.
 
 Take a screenshot using the Windows Snipping tool (`win + shift + S`), then run `wslshot` in your terminal to transfer the image.
 
@@ -30,8 +30,7 @@ Take a screenshot using the Windows Snipping tool (`win + shift + S`), then run 
 ## Features
 
 * Set a default source directory for screenshots.
-* Designate a custom source or destination directory per operation.
-  * Or automatically detect `/assets/images/` or other typical directories for this use case.
+* Designate a custom source or destination directory per operation, or let wslshot detect typical image directories automatically.
 * Fetch the most recent screenshot or specify a number of recent screenshots to fetch.
 * Control automatic staging of screenshots when copied to a git repository.
 * Convert screenshots to `png`, `jpg`/`jpeg`, `webp`, or `gif` during copy (flag or default).
@@ -124,14 +123,14 @@ These are default settings. Override them on a per-operation basis by providing 
 wslshot
 ```
 
-This fetches the most recent screenshot from the source directory. If run inside a git repository, it creates the directory `/assets/images` (if it doesn't exist) and copies the screenshot to it.
+This fetches the most recent screenshot from the source directory. If run inside a git repository, wslshot looks for an existing image directory (checked in priority order) and copies the screenshot there. If none exists, it creates `/assets/images/`.
 
-**These are the directories automatically detected for the copy**:
+**Directories checked in priority order**:
 
-- `/assets/img/`
-- `/assets/images/`
-- `/img/`
-- `/images/`
+1. `/img/`
+2. `/images/`
+3. `/assets/img/`
+4. `/assets/images/`
 
 **You can also choose a specific number of screenshots**:
 
@@ -177,8 +176,8 @@ Note that you can _drag and drop_ a file into the Windows Terminal to automatica
 
 Upon success, the command outputs the new path in Markdown format:
 
-```bash
-![{uuid}.gif](/assets/images/{uuid}.gif)
+```
+![<uuid>.gif](/assets/images/<uuid>.gif)
 ```
 
 ### File Copy Behavior
