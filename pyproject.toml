@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=67", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.9.21,<0.10.0"]
+build-backend = "uv_build"
 
 [project]
 name = "wslshot"
@@ -11,14 +11,14 @@ license = "Apache-2.0"
 authors = [{ name = "Sébastien De Revière" }]
 requires-python = ">=3.10"
 dependencies = [
-    "click>=8.3.0,<9.0",
-    "click-default-group>=1.2.4,<2.0",
+    "click>=8.3.0",
+    "click-default-group>=1.2.4",
     "Pillow>=10.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
+    "pytest>=8.0.0",
     "scriv[toml]>=1.5.0",
 ]
 
@@ -30,8 +30,8 @@ Changelog = "https://github.com/sderev/wslshot/blob/main/CHANGELOG.md"
 [project.scripts]
 wslshot = "wslshot.cli:wslshot"
 
-[tool.setuptools]
-packages = ["wslshot"]
+[tool.uv.build-backend]
+module-root = ""
 
 [tool.ruff]
 line-length = 100
