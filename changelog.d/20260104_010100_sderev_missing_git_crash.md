@@ -1,3 +1,4 @@
-### Fixed
+Fixed
+-----
 
-* Handle missing git binary gracefully. When git is not installed, `is_git_repo()` returns `False` and staging is skipped instead of crashing with `FileNotFoundError`.
+* Handle missing git gracefully. When git is not installed, staging is skipped instead of crashing.

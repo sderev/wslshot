@@ -1,3 +1,3 @@
 Fixed
 -----
-* Make config write edge cases best-effort instead of failing. Directory `fsync` and `chmod` errors now log warnings rather than raising exceptions.
+* Improved resilience when saving config files. Non-critical file system errors now log warnings instead of crashing.

@@ -1,8 +1,8 @@
 Security
 --------
 - **Breaking change:** Enforce non-bypassable image size ceilings (50MB per file, 200MB aggregate) and treat decompression bombs as errors so oversized or malicious images are rejected even when limits are "disabled."
-- **Breaking change:** Reject symlinks in sources, destinations, and direct image paths to close CWE-59 exfiltration; opt into `--allow-symlinks` only when you explicitly trust the paths.
-- Validate PNG/JPEG/GIF inputs via magic bytes and trailer checks across CLI flows to block corrupted or spoofed images before processing.
+- **Breaking change:** Reject symlinks in sources, destinations, and direct image paths to prevent unauthorized file access; opt into `--allow-symlinks` only when you explicitly trust the paths.
+- Validate PNG/JPEG/GIF image integrity to block corrupted or spoofed images before processing.
 
 Added
 -----
@@ -16,6 +16,6 @@ Changed
 
 Fixed
 -----
-- `stage_screenshots` now falls back to staging files individually when batch `git add` fails, so valid captures still reach the index.
+- Staging now falls back to individual file staging when batch `git add` fails, so valid captures still reach the index.
 - Screenshot discovery is case-insensitive, so files like `IMAGE.PNG` and `SHOT.JPG` are included.
-- Config writes fsync both file and directory entries to avoid losing settings if the system crashes mid-save.
+- Config saves are crash-safe to avoid losing settings if the system crashes mid-save.

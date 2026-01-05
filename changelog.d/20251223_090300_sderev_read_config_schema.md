@@ -1,3 +1,3 @@
 Changed
 -------
-* Update `read_config()` to validate config against schema; invalid configs are auto-fixed by recreating with defaults.
+* Config is now validated on load; invalid configurations are automatically fixed by resetting to defaults.
