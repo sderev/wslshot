@@ -551,3 +551,42 @@ class TestAllowSymlinksFlag:
         # Should succeed
         assert result.exit_code == 0, f"Command failed: {result.output}"
         assert "Security error" not in result.output
+
+    def test_flag_allows_symlinked_file_inside_source(self, tmp_path, fake_home):
+        """`--allow-symlinks` flag should allow symlinked files inside source directory."""
+        runner = CliRunner()
+
+        # Create source directory
+        source = tmp_path / "source"
+        source.mkdir()
+
+        # Create external file
+        external_dir = tmp_path / "external"
+        external_dir.mkdir()
+        external_file = external_dir / "external.png"
+        create_test_image(external_file)
+
+        # Create symlink inside source pointing to external file
+        symlink_file = source / "link.png"
+        symlink_file.symlink_to(external_file)
+
+        # Create destination
+        destination = tmp_path / "destination"
+        destination.mkdir()
+
+        # Run fetch with --allow-symlinks
+        result = runner.invoke(
+            fetch,
+            [
+                "--source",
+                str(source),
+                "--destination",
+                str(destination),
+                "--allow-symlinks",
+            ],
+        )
+
+        # Should succeed and copy the symlinked file
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        assert "Security error" not in result.output
+        assert "Skipping symlinked file" not in result.output
