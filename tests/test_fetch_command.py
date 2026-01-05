@@ -837,14 +837,14 @@ def test_fetch_rejects_plain_text_cli_input(
     assert "text" in result.output
 
 
-def test_fetch_rejects_plain_text_in_config(
+def test_fetch_handles_plain_text_in_config_gracefully(
     runner: CliRunner,
     fake_home: Path,
     source_dir: Path,
     dest_dir: Path,
     config_file: Path,
 ) -> None:
-    """Test config with `plain_text` format is rejected with error."""
+    """Test config with legacy `plain_text` format resets to defaults with warning."""
     create_screenshot(source_dir, "screenshot.png")
 
     # Create config with legacy plain_text format
@@ -852,7 +852,6 @@ def test_fetch_rejects_plain_text_in_config(
         "default_source": str(source_dir),
         "default_destination": str(dest_dir),
         "default_output_format": "plain_text",
-        "default_count": 1,
         "auto_stage_enabled": False,
         "default_convert_to": None,
     }
@@ -865,14 +864,14 @@ def test_fetch_rejects_plain_text_in_config(
         env={"HOME": str(fake_home)},
     )
 
-    # Should fail with exit code 1
-    assert result.exit_code == 1
-    # Should show error message
-    assert "Invalid `--output-style`" in result.output
-    # Should list valid options
-    assert "markdown" in result.output
-    assert "html" in result.output
-    assert "text" in result.output
+    # Should succeed after resetting to defaults
+    assert result.exit_code == 0
+    # Should warn about corrupted config
+    assert "corrupted" in result.output.lower()
+    # Should suggest running configure
+    assert "wslshot configure" in result.output
+    # Should produce markdown output (the default)
+    assert "![" in result.output
 
 
 @pytest.mark.parametrize(
