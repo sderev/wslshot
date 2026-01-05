@@ -1051,7 +1051,10 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
         # Copy the screenshot(s) to the destination directory.
         try:
             source_screenshots = get_screenshots(
-                source, count, max_file_size_bytes=max_file_size_bytes
+                source,
+                count,
+                max_file_size_bytes=max_file_size_bytes,
+                allow_symlinks=allow_symlinks,
             )
         except ScreenshotNotFoundError as error:
             click.secho(f"Error: {error}", fg="red", err=True)
@@ -1102,7 +1105,11 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
 
 
 def get_screenshots(
-    source: str, count: int, max_file_size_bytes: int | None = None
+    source: str,
+    count: int,
+    max_file_size_bytes: int | None = None,
+    *,
+    allow_symlinks: bool = False,
 ) -> tuple[Path, ...]:
     """
     Get the most recent screenshot(s) from the source directory.
@@ -1111,6 +1118,7 @@ def get_screenshots(
     - source: The source directory.
     - count: The number of screenshots to fetch.
     - max_file_size_bytes: Per-file size cap in bytes (None uses default).
+    - allow_symlinks: Whether to allow symlinked files inside the source directory.
 
     Returns:
     - The screenshot(s)'s path.
@@ -1126,6 +1134,14 @@ def get_screenshots(
                 if Path(entry.name).suffix.lower() in SUPPORTED_EXTENSIONS:
                     file_path = Path(entry.path)
                     try:
+                        # Check symlink using entry's cached info (no extra syscall)
+                        if not allow_symlinks and entry.is_symlink():
+                            click.echo(
+                                f"{WARNING_PREFIX} Skipping symlinked file: "
+                                f"{sanitize_path_for_error(file_path)}",
+                                err=True,
+                            )
+                            continue
                         # Stat once and check if it's a regular file
                         stat_result = file_path.stat()
                         if S_ISREG(stat_result.st_mode):
@@ -1347,6 +1363,9 @@ def stage_screenshots(screenshots: tuple[Path, ...], git_root: Path) -> None:
             check=True,
             cwd=git_root,
         )
+    except FileNotFoundError:
+        click.echo(f"{WARNING_PREFIX} Git not found; skipping auto-staging.", err=True)
+        return
     except subprocess.CalledProcessError:
         # Batch staging failed - fall back to individual staging
         # This ensures valid files are staged even if some fail
@@ -1358,6 +1377,9 @@ def stage_screenshots(screenshots: tuple[Path, ...], git_root: Path) -> None:
                     check=True,
                     cwd=git_root,
                 )
+            except FileNotFoundError:
+                click.echo(f"{WARNING_PREFIX} Git not found; skipping auto-staging.", err=True)
+                return
             except subprocess.CalledProcessError as e:
                 click.echo(f"{WARNING_PREFIX} Auto-staging failed for {screenshot}: {e}", err=True)
                 if not hinted:
@@ -1922,7 +1944,7 @@ def is_git_repo() -> bool:
             stderr=subprocess.DEVNULL,
             check=True,
         )
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         return False
 
     return True
@@ -1942,6 +1964,8 @@ def get_git_root() -> Path:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         ).stdout
+    except FileNotFoundError as error:
+        raise GitError("Git executable not found.") from error
     except subprocess.CalledProcessError as error:
         raise GitError("Could not determine the Git repository root.") from error
 

@@ -53,6 +53,17 @@ def test_is_git_repo_handles_subprocess_errors_gracefully(monkeypatch: pytest.Mo
     assert cli.is_git_repo() is False
 
 
+def test_is_git_repo_handles_missing_git_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test is_git_repo() returns False when git is not installed."""
+
+    def fake_run(*args, **kwargs):
+        raise FileNotFoundError("git not found")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert cli.is_git_repo() is False
+
+
 # ============================================================================
 # Getting Repository Root Tests
 # ============================================================================
@@ -635,3 +646,37 @@ def test_stage_screenshots_batch_success_no_fallback(
     # Should only call batch command once (no fallback needed)
     assert len(called_commands) == 1
     assert called_commands[0] == ["git", "add", "shot1.png", "shot2.png"]
+
+
+def test_get_git_root_handles_missing_git_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test get_git_root() raises GitError when git is not installed."""
+
+    def fake_run(*args, **kwargs):
+        raise FileNotFoundError("git not found")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(GitError, match="Git executable not found"):
+        cli.get_git_root()
+
+
+def test_stage_screenshots_handles_missing_git_binary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    """Test stage_screenshots() skips gracefully when git is not installed."""
+    git_root = tmp_path / "repo"
+    git_root.mkdir()
+
+    def fake_run(*args, **kwargs):
+        raise FileNotFoundError("git not found")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    screenshots = (Path("shot1.png"), Path("shot2.png"))
+
+    # Should not raise - just skip with a warning
+    cli.stage_screenshots(screenshots, git_root)
+
+    captured = capsys.readouterr()
+    assert "Git not found" in captured.err
+    assert "skipping auto-staging" in captured.err

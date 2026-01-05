@@ -113,7 +113,7 @@ class TestResolvePathSafely:
 class TestFetchCommandSymlinkSecurity:
     """Integration tests for `fetch` command symlink security."""
 
-    def test_rejects_symlink_source_directory(self, tmp_path):
+    def test_rejects_symlink_source_directory(self, tmp_path, fake_home):
         """`fetch` command should reject symlink source directories."""
         runner = CliRunner()
 
@@ -137,7 +137,7 @@ class TestFetchCommandSymlinkSecurity:
         assert "Security error" in result.output
         assert "Symlinks are not allowed" in result.output
 
-    def test_rejects_symlink_destination_directory(self, tmp_path):
+    def test_rejects_symlink_destination_directory(self, tmp_path, fake_home):
         """`fetch` command should reject symlink destination directories."""
         runner = CliRunner()
 
@@ -161,7 +161,7 @@ class TestFetchCommandSymlinkSecurity:
         assert "Security error" in result.output
         assert "Symlinks are not allowed" in result.output
 
-    def test_rejects_symlink_as_direct_file_path(self, tmp_path):
+    def test_rejects_symlink_as_direct_file_path(self, tmp_path, fake_home):
         """`fetch` should reject symlinks when using direct file path argument (CRITICAL GAP)."""
         runner = CliRunner()
 
@@ -185,7 +185,43 @@ class TestFetchCommandSymlinkSecurity:
         assert "Security error" in result.output
         assert "Symlinks are not allowed" in result.output
 
-    def test_rejects_symlink_in_image_path_parent(self, tmp_path):
+    def test_rejects_symlinked_file_inside_source(self, tmp_path, fake_home):
+        """`fetch` should reject symlinked files inside a real source directory."""
+        runner = CliRunner()
+
+        source = tmp_path / "source"
+        source.mkdir()
+        destination = tmp_path / "destination"
+        destination.mkdir()
+
+        real_file = source / "real.png"
+        create_test_image(real_file)
+
+        external_dir = tmp_path / "external"
+        external_dir.mkdir()
+        external_file = external_dir / "external.jpg"
+        create_test_image(external_file)
+
+        symlink_file = source / "newest.png"
+        symlink_file.symlink_to(external_file)
+
+        os.utime(real_file, (1, 1))
+        os.utime(external_file, None)
+
+        result = runner.invoke(
+            fetch,
+            ["--source", str(source), "--destination", str(destination), "--count", "1"],
+        )
+
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+
+        copied_files = list(destination.iterdir())
+        assert len(copied_files) == 1
+        copied_bytes = copied_files[0].read_bytes()
+        assert copied_bytes == real_file.read_bytes()
+        assert copied_bytes != external_file.read_bytes()
+
+    def test_rejects_symlink_in_image_path_parent(self, tmp_path, fake_home):
         """`fetch` should reject symlinks in parent directories of image_path (CRITICAL GAP)."""
         runner = CliRunner()
 
@@ -214,7 +250,7 @@ class TestFetchCommandSymlinkSecurity:
         assert "Security error" in result.output
         assert "Path contains symlink" in result.output
 
-    def test_rejects_symlink_in_source_parent_chain(self, tmp_path):
+    def test_rejects_symlink_in_source_parent_chain(self, tmp_path, fake_home):
         """`fetch` should reject symlinks in source parent directory chain."""
         runner = CliRunner()
 
@@ -243,7 +279,7 @@ class TestFetchCommandSymlinkSecurity:
         assert "Security error" in result.output
         assert "Path contains symlink" in result.output
 
-    def test_rejects_symlink_in_destination_parent_chain(self, tmp_path):
+    def test_rejects_symlink_in_destination_parent_chain(self, tmp_path, fake_home):
         """`fetch` should reject symlinks in destination parent directory chain."""
         runner = CliRunner()
 
@@ -324,7 +360,7 @@ class TestConfigureCommandSymlinkSecurity:
 class TestAttackScenarios:
     """Real-world attack scenario tests."""
 
-    def test_cannot_exfiltrate_ssh_key_via_image_path(self, tmp_path, monkeypatch):
+    def test_cannot_exfiltrate_ssh_key_via_image_path(self, tmp_path, fake_home, monkeypatch):
         """Verify SSH key cannot be exfiltrated using `image_path` argument (CRITICAL)."""
         runner = CliRunner()
 
@@ -357,7 +393,7 @@ class TestAttackScenarios:
         copied_files = list(git_repo.iterdir())
         assert len(copied_files) == 0, "SSH key should not be copied"
 
-    def test_cannot_exfiltrate_ssh_key_via_source_directory(self, tmp_path):
+    def test_cannot_exfiltrate_ssh_key_via_source_directory(self, tmp_path, fake_home):
         """Verify SSH key cannot be exfiltrated using source directory."""
         runner = CliRunner()
 
@@ -386,7 +422,7 @@ class TestAttackScenarios:
         assert "Security error" in result.output
         assert "Symlinks are not allowed" in result.output
 
-    def test_cannot_exfiltrate_etc_passwd(self, tmp_path):
+    def test_cannot_exfiltrate_etc_passwd(self, tmp_path, fake_home):
         """Verify `/etc/passwd` cannot be exfiltrated using symlinks."""
         runner = CliRunner()
 
@@ -422,7 +458,7 @@ class TestAttackScenarios:
 class TestAllowSymlinksFlag:
     """Tests for `--allow-symlinks` CLI flag."""
 
-    def test_flag_allows_symlink_source(self, tmp_path):
+    def test_flag_allows_symlink_source(self, tmp_path, fake_home):
         """`--allow-symlinks` flag should allow symlink source directories."""
         runner = CliRunner()
 
@@ -456,7 +492,7 @@ class TestAllowSymlinksFlag:
         assert result.exit_code == 0, f"Command failed: {result.output}"
         assert "Security error" not in result.output
 
-    def test_flag_allows_symlink_destination(self, tmp_path):
+    def test_flag_allows_symlink_destination(self, tmp_path, fake_home):
         """`--allow-symlinks` flag should allow symlink destination directories."""
         runner = CliRunner()
 
@@ -490,7 +526,7 @@ class TestAllowSymlinksFlag:
         assert result.exit_code == 0, f"Command failed: {result.output}"
         assert "Security error" not in result.output
 
-    def test_flag_allows_symlink_image_path(self, tmp_path):
+    def test_flag_allows_symlink_image_path(self, tmp_path, fake_home):
         """`--allow-symlinks` flag should allow symlink as direct file path."""
         runner = CliRunner()
 
