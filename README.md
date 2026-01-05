@@ -4,7 +4,7 @@
 
 Take a screenshot using the Windows Snipping tool (`win + shift + S`), then run `wslshot` in your terminal to transfer the image.
 
-![demo_0](https://github.com/sderev/wslshot/assets/24412384/656b0595-0c27-41fa-966a-d6ca39ec410a)
+![demo](demo.gif)
 
 <!-- TOC -->
 ## Table of Contents
@@ -186,11 +186,13 @@ The specified image is copied to your designated directory on the Linux VM.
 
 ## Vim Integration
 
-If `wslshot` is in your PATH, call it with a shebang command:
+If `wslshot` is in your PATH, call it with a filter command:
 
 ```vim
 :.!wslshot
 ```
+
+![vim demo](demo-vim.gif)
 
 ---
 
