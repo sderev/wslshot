@@ -16,7 +16,7 @@ dependencies = [
     "Pillow>=10.0.0",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=8.0.0",
     "scriv[toml]>=1.5.0",
