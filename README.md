@@ -140,6 +140,14 @@ wslshot -n 3
 
 This fetches the three most recent screenshots.
 
+**Print source paths without copying files**:
+
+```bash
+wslshot --no-transfer
+```
+
+This prints the source paths for the selected screenshots without copying files or interacting with git. Output defaults to text; override with `--output-style`.
+
 **Convert screenshots to a different format**:
 
 ```bash
@@ -159,7 +167,7 @@ WARNING: Only use with trusted paths. By default, `wslshot` rejects symlinks for
 **These are all the possible options**:
 
 ```bash
-wslshot [--source /custom/source] [--destination /custom/destination] [--count 3] [--output-style HTML] [--convert-to png] [--allow-symlinks]
+wslshot [--source /custom/source] [--destination /custom/destination] [--count 3] [--output-style HTML] [--no-transfer] [--convert-to png] [--allow-symlinks]
 ```
 
 ## Using a Specific Image Path

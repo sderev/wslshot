@@ -919,8 +919,16 @@ def wslshot():
     default=False,
     help="Allow symlinks in paths (security risk; use only with trusted paths).",
 )
+@click.option(
+    "--no-transfer",
+    is_flag=True,
+    default=False,
+    help="Print source paths without copying files (defaults to text output; no Git integration).",
+)
 @click.argument("image_path", type=click.Path(exists=True), required=False)
-def fetch(source, destination, count, output_format, convert_to, allow_symlinks, image_path):
+def fetch(
+    source, destination, count, output_format, convert_to, allow_symlinks, no_transfer, image_path
+):
     """
     Copy screenshots into the destination directory and print their copied paths.
 
@@ -929,30 +937,118 @@ def fetch(source, destination, count, output_format, convert_to, allow_symlinks,
       wslshot fetch
       wslshot fetch --count 5
       wslshot fetch --convert-to webp
+      wslshot fetch --no-transfer
       wslshot fetch "<...>/screenshot.png"
     """
-    config = read_config(get_config_file_path_or_exit())
+    # --no-transfer conflict checks
+    if no_transfer:
+        if convert_to:
+            raise click.BadOptionUsage(
+                "--convert-to",
+                "requires file transfer; cannot combine with --no-transfer",
+            )
+        if destination:
+            raise click.BadOptionUsage(
+                "--destination",
+                "has no effect with --no-transfer",
+            )
+
+    # When --no-transfer is set, avoid creating config file (read-only operation)
+    if no_transfer:
+        config_path = get_config_file_path_or_exit(create_if_missing=False)
+        if config_path.exists():
+            config = read_config(config_path)
+        else:
+            config = DEFAULT_CONFIG.copy()
+    else:
+        config = read_config(get_config_file_path_or_exit())
     max_file_size_bytes, max_total_size_bytes = get_size_limits(config)
 
     # Source directory
     if source is None:
         source = config["default_source"]
 
-    try:
-        source = resolve_path_safely(source, check_symlink=not allow_symlinks)
-    except ValueError as error:
-        sanitized_error = format_path_error(error)
-        click.echo(f"{SECURITY_ERROR_PREFIX} {sanitized_error}", err=True)
-        click.echo("Hint: If you trust this path, rerun with `--allow-symlinks`.", err=True)
-        sys.exit(1)
-    except FileNotFoundError:
-        click.secho(
-            f"Error: Source directory not found: {sanitize_path_for_error(source)}",
-            fg="red",
-            err=True,
-        )
-        click.echo("Hint: Set `--source` or run `wslshot configure`.", err=True)
-        sys.exit(1)
+    if not image_path:
+        try:
+            source = resolve_path_safely(source, check_symlink=not allow_symlinks)
+        except ValueError as error:
+            sanitized_error = format_path_error(error)
+            click.echo(f"{SECURITY_ERROR_PREFIX} {sanitized_error}", err=True)
+            click.echo("Hint: If you trust this path, rerun with `--allow-symlinks`.", err=True)
+            sys.exit(1)
+        except FileNotFoundError:
+            click.secho(
+                f"Error: Source directory not found: {sanitize_path_for_error(source)}",
+                fg="red",
+                err=True,
+            )
+            click.echo("Hint: Set `--source` or run `wslshot configure`.", err=True)
+            sys.exit(1)
+
+    # --no-transfer: validate and print source paths, then exit early
+    if no_transfer:
+        # Default to text output for scripting use cases (override config default)
+        if output_format is None:
+            output_format = OUTPUT_FORMAT_TEXT
+
+        if output_format.casefold() not in VALID_OUTPUT_FORMATS:
+            click.secho(f"Error: Invalid `--output-style`: {output_format}", fg="red", err=True)
+            valid_options = ", ".join(VALID_OUTPUT_FORMATS)
+            suggestion = suggest_format(output_format, list(VALID_OUTPUT_FORMATS))
+            hint = f"Hint: Use one of: {valid_options}."
+            if suggestion:
+                hint = f"{hint} {suggestion}"
+            click.echo(hint, err=True)
+            sys.exit(1)
+
+        if image_path:
+            # Validate explicit image path
+            try:
+                image_path_resolved = resolve_path_safely(
+                    image_path, check_symlink=not allow_symlinks
+                )
+                validate_image_file(image_path_resolved, max_size_bytes=max_file_size_bytes)
+            except ValueError as error:
+                sanitized_error = format_path_error(error)
+                error_msg = str(error).casefold()
+                if "symlink" in error_msg:
+                    click.echo(f"{SECURITY_ERROR_PREFIX} {sanitized_error}", err=True)
+                    if not allow_symlinks:
+                        click.echo(
+                            "Hint: If you trust this path, rerun with `--allow-symlinks`.",
+                            err=True,
+                        )
+                else:
+                    click.secho(f"Error: {sanitized_error}", fg="red", err=True)
+                click.echo(f"Source file: {sanitize_path_for_error(image_path)}", err=True)
+                sys.exit(1)
+            except FileNotFoundError:
+                click.secho(
+                    f"Error: Image file not found: {sanitize_path_for_error(image_path)}",
+                    fg="red",
+                    err=True,
+                )
+                click.echo("Hint: Check the path and try again.", err=True)
+                sys.exit(1)
+
+            print_formatted_path(output_format, (image_path_resolved,), relative_to_repo=False)
+        else:
+            # Get screenshots from source directory (skips aggregate size limit)
+            try:
+                screenshots = get_screenshots(
+                    source,
+                    count,
+                    max_file_size_bytes=max_file_size_bytes,
+                    allow_symlinks=allow_symlinks,
+                )
+            except ScreenshotNotFoundError as error:
+                click.secho(f"Error: {error}", fg="red", err=True)
+                click.echo("Hint: Set `--source` or run `wslshot configure`.", err=True)
+                sys.exit(1)
+
+            print_formatted_path(output_format, screenshots, relative_to_repo=False)
+
+        return
 
     # Destination directory
     if destination is None:
