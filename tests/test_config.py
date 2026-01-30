@@ -1660,3 +1660,71 @@ class TestValidateConfig:
         with open(backup_file, "r", encoding="UTF-8") as f:
             backup_config = json.load(f)
         assert backup_config == invalid_config
+
+    @pytest.mark.parametrize(
+        "non_dict_value,type_name",
+        [
+            ([], "list"),
+            ("string", "str"),
+            (123, "int"),
+            (12.5, "float"),
+            (None, "NoneType"),
+            (True, "bool"),
+        ],
+    )
+    def test_validate_config_rejects_non_dict_json(
+        self, non_dict_value: object, type_name: str
+    ) -> None:
+        """Test that validate_config raises ConfigurationError for non-dict JSON."""
+        with pytest.raises(ConfigurationError, match=f"expected object, got {type_name}"):
+            cli.validate_config(non_dict_value)  # type: ignore[arg-type]
+
+    def test_read_config_handles_non_dict_json(
+        self, fake_home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test that read_config treats non-dict JSON as corruption."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.write_text("[]", encoding="UTF-8")  # Array instead of object
+
+        # Non-interactive mode: should reset to defaults
+        monkeypatch.setattr(cli, "_is_interactive_terminal", lambda: False)
+
+        result = cli.read_config(config_file)
+
+        # Should return defaults after auto-fix
+        assert result == cli.DEFAULT_CONFIG
+
+        # Config file should be reset to defaults
+        with open(config_file, "r", encoding="UTF-8") as f:
+            written_config = json.load(f)
+        assert written_config == cli.DEFAULT_CONFIG
+
+        # Original should be backed up
+        backup_file = config_file.with_name(f"{config_file.name}.corrupted")
+        assert backup_file.exists()
+        assert backup_file.read_text(encoding="UTF-8") == "[]"
+
+        # Warning should be shown
+        captured = capsys.readouterr()
+        assert "corrupted" in captured.err.lower()
+
+    def test_read_config_readonly_handles_non_dict_json(
+        self, fake_home: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test that read_config_readonly returns defaults for non-dict JSON."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.write_text('"just a string"', encoding="UTF-8")
+
+        result = cli.read_config_readonly(config_file)
+
+        # Should return defaults
+        assert result == cli.DEFAULT_CONFIG
+
+        # Original file should be unchanged (readonly mode)
+        assert config_file.read_text(encoding="UTF-8") == '"just a string"'
+
+        # Warning should be shown
+        captured = capsys.readouterr()
+        assert "unreadable or invalid" in captured.err.lower()

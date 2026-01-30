@@ -1594,6 +1594,12 @@ def validate_config(raw_config: dict[str, object]) -> dict[str, object]:
     Raises:
         ConfigurationError: If a value fails validation (except path existence)
     """
+    # Reject non-dict JSON (e.g., [], "", 123) early
+    if not isinstance(raw_config, dict):
+        raise ConfigurationError(
+            f"Invalid config format: expected object, got {type(raw_config).__name__}"
+        )
+
     validated: dict[str, object] = {}
 
     # Fields where non-existent paths are allowed (warn, don't fail)
