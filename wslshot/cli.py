@@ -957,7 +957,7 @@ def fetch(
     if no_transfer:
         config_path = get_config_file_path_or_exit(create_if_missing=False)
         if config_path.exists():
-            config = read_config(config_path)
+            config = read_config_readonly(config_path)
         else:
             config = DEFAULT_CONFIG.copy()
     else:
@@ -1685,6 +1685,26 @@ def read_config(config_file_path: Path) -> dict[str, object]:
         write_config_or_exit(config_file_path, config)
 
     return config
+
+
+def read_config_readonly(config_file_path: Path) -> dict[str, object]:
+    """
+    Read the configuration file without writing changes.
+
+    If the config is invalid or unreadable, fall back to defaults and emit a warning.
+    """
+    try:
+        with open(config_file_path, "r", encoding="UTF-8") as file:
+            raw_config = json.load(file)
+        return validate_config(raw_config)
+    except (json.JSONDecodeError, ConfigurationError, OSError) as error:
+        click.echo(
+            f"{WARNING_PREFIX} Config file {sanitize_path_for_error(config_file_path)} is unreadable or invalid "
+            f"({error}). Ignoring it for this run.",
+            err=True,
+        )
+        click.echo("Hint: Run `wslshot configure` to set your preferences.", err=True)
+        return DEFAULT_CONFIG.copy()
 
 
 def migrate_config(config_path: Path, *, dry_run: bool = False) -> dict[str, object]:

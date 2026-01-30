@@ -198,6 +198,31 @@ class TestReadConfig:
         assert backup_file.exists()
         assert backup_file.read_text(encoding="UTF-8") == corrupted_contents
 
+    def test_read_config_readonly_with_corrupted_json_does_not_write(
+        self, fake_home: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that readonly config parsing never writes or backs up."""
+        config_file = fake_home / ".config" / "wslshot" / "config.json"
+        corrupted_contents = '{"invalid": json content}'
+        config_file.write_text(corrupted_contents, encoding="UTF-8")
+
+        monkeypatch.setattr(
+            cli, "write_config", lambda _path: pytest.fail("write_config() was called")
+        )
+        monkeypatch.setattr(
+            cli,
+            "write_config_or_exit",
+            lambda *_args, **_kwargs: pytest.fail("write_config_or_exit() was called"),
+        )
+
+        result = cli.read_config_readonly(config_file)
+
+        assert result == cli.DEFAULT_CONFIG
+        assert config_file.read_text(encoding="UTF-8") == corrupted_contents
+
+        backup_file = config_file.with_name(f"{config_file.name}.corrupted")
+        assert not backup_file.exists()
+
 
 class TestWriteConfig:
     """Tests for write_config() function."""
