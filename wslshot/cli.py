@@ -57,6 +57,10 @@ CONFIG_FILE_PERMISSIONS = 0o600
 CONFIG_DIR_PERMISSIONS = 0o700
 FILE_PERMISSION_MASK = 0o777
 
+# Config file location (relative parts only; Path.home() evaluated at runtime)
+CONFIG_DIR_RELATIVE = Path(".config") / "wslshot"
+CONFIG_FILE_NAME = "config.json"
+
 # Output formats
 OUTPUT_FORMAT_MARKDOWN = "markdown"
 OUTPUT_FORMAT_HTML = "html"
@@ -94,6 +98,9 @@ VALID_CONVERT_FORMATS = ("png", "jpg", "jpeg", "webp", "gif")
 
 # Supported image file extensions (lowercase)
 SUPPORTED_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif")
+
+# Image conversion quality (JPEG/WebP)
+IMAGE_SAVE_QUALITY = 95
 
 
 def normalize_optional_directory(value: object) -> str:
@@ -1421,11 +1428,11 @@ def convert_image_format(source_path: Path, target_format: str) -> Path:
 
             # Save with appropriate format
             if target_format == "jpg":
-                img.save(new_path, "JPEG", quality=95, optimize=True)
+                img.save(new_path, "JPEG", quality=IMAGE_SAVE_QUALITY, optimize=True)
             elif target_format == "png":
                 img.save(new_path, "PNG", optimize=True)
             elif target_format == "webp":
-                img.save(new_path, "WEBP", quality=95)
+                img.save(new_path, "WEBP", quality=IMAGE_SAVE_QUALITY)
             elif target_format == "gif":
                 img.save(new_path, "GIF", optimize=True)
 
@@ -1545,7 +1552,8 @@ def get_config_file_path(*, create_if_missing: bool = True) -> Path:
     """
     Get the configuration file path, optionally creating the file.
     """
-    config_file_path = Path.home() / ".config" / "wslshot" / "config.json"
+    config_dir = Path.home() / CONFIG_DIR_RELATIVE
+    config_file_path = config_dir / CONFIG_FILE_NAME
 
     if config_file_path.is_symlink():
         raise SecurityError("Config file is a symlink; refusing to use it.")
