@@ -1679,13 +1679,25 @@ class TestValidateConfig:
         with pytest.raises(ConfigurationError, match=f"expected object, got {type_name}"):
             cli.validate_config(non_dict_value)  # type: ignore[arg-type]
 
+    @pytest.mark.parametrize(
+        "raw_config",
+        [
+            "[]",
+            '"just a string"',
+            "123",
+        ],
+    )
     def test_read_config_handles_non_dict_json(
-        self, fake_home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+        self,
+        raw_config: str,
+        fake_home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Test that read_config treats non-dict JSON as corruption."""
         config_file = fake_home / ".config" / "wslshot" / "config.json"
         config_file.parent.mkdir(parents=True, exist_ok=True)
-        config_file.write_text("[]", encoding="UTF-8")  # Array instead of object
+        config_file.write_text(raw_config, encoding="UTF-8")
 
         # Non-interactive mode: should reset to defaults
         monkeypatch.setattr(cli, "_is_interactive_terminal", lambda: False)
@@ -1703,7 +1715,7 @@ class TestValidateConfig:
         # Original should be backed up
         backup_file = config_file.with_name(f"{config_file.name}.corrupted")
         assert backup_file.exists()
-        assert backup_file.read_text(encoding="UTF-8") == "[]"
+        assert backup_file.read_text(encoding="UTF-8") == raw_config
 
         # Warning should be shown
         captured = capsys.readouterr()

@@ -1696,6 +1696,10 @@ def read_config(
     try:
         with open(config_file_path, "r", encoding="UTF-8") as file:
             raw_config = json.load(file)
+        if not isinstance(raw_config, dict):
+            raise ConfigurationError(
+                f"Invalid config format: expected object, got {type(raw_config).__name__}"
+            )
         config = validate_config(raw_config, skip_fields=skip_fields)
 
     except (json.JSONDecodeError, ConfigurationError) as error:
@@ -1744,6 +1748,10 @@ def read_config_readonly(
     try:
         with open(config_file_path, "r", encoding="UTF-8") as file:
             raw_config = json.load(file)
+        if not isinstance(raw_config, dict):
+            raise ConfigurationError(
+                f"Invalid config format: expected object, got {type(raw_config).__name__}"
+            )
         return validate_config(raw_config, skip_fields=skip_fields)
     except (json.JSONDecodeError, ConfigurationError, OSError) as error:
         click.echo(
