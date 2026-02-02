@@ -960,15 +960,17 @@ def fetch(
                 "has no effect with --no-transfer",
             )
 
+    skip_fields = {"default_source"} if image_path else None
+
     # When --no-transfer is set, avoid creating config file (read-only operation)
     if no_transfer:
         config_path = get_config_file_path_or_exit(create_if_missing=False)
         if config_path.exists():
-            config = read_config_readonly(config_path)
+            config = read_config_readonly(config_path, skip_fields=skip_fields)
         else:
             config = DEFAULT_CONFIG.copy()
     else:
-        config = read_config(get_config_file_path_or_exit())
+        config = read_config(get_config_file_path_or_exit(), skip_fields=skip_fields)
     max_file_size_bytes, max_total_size_bytes = get_size_limits(config)
 
     # Source directory
@@ -1582,7 +1584,11 @@ def get_config_file_path_or_exit(*, create_if_missing: bool = True) -> Path:
         sys.exit(1)
 
 
-def validate_config(raw_config: dict[str, object]) -> dict[str, object]:
+def validate_config(
+    raw_config: dict[str, object],
+    *,
+    skip_fields: set[str] | None = None,
+) -> dict[str, object]:
     """
     Validate configuration against schema and normalize values.
 
@@ -1595,6 +1601,7 @@ def validate_config(raw_config: dict[str, object]) -> dict[str, object]:
 
     Args:
         raw_config: Raw config dictionary from JSON
+        skip_fields: Config fields to keep as-is without validation
 
     Returns:
         Validated config with all required keys
@@ -1622,11 +1629,25 @@ def validate_config(raw_config: dict[str, object]) -> dict[str, object]:
             err=True,
         )
 
+    skip_fields = set(skip_fields or set())
+
     # Validate each expected field
     for field, spec in CONFIG_FIELD_SPECS.items():
         if field not in raw_config:
             # Use default for missing fields
             validated[field] = spec.default
+            continue
+
+        if field in skip_fields:
+            raw_value = raw_config[field]
+            if raw_value is None:
+                validated[field] = spec.default
+            elif isinstance(raw_value, Path):
+                validated[field] = str(raw_value)
+            elif isinstance(raw_value, str):
+                validated[field] = raw_value if raw_value.strip() else spec.default
+            else:
+                validated[field] = spec.default
             continue
 
         try:
@@ -1654,7 +1675,11 @@ def validate_config(raw_config: dict[str, object]) -> dict[str, object]:
     return validated
 
 
-def read_config(config_file_path: Path) -> dict[str, object]:
+def read_config(
+    config_file_path: Path,
+    *,
+    skip_fields: set[str] | None = None,
+) -> dict[str, object]:
     """
     Read the configuration file.
 
@@ -1663,6 +1688,7 @@ def read_config(config_file_path: Path) -> dict[str, object]:
 
     Args:
         config_file_path: The path to the configuration file.
+        skip_fields: Config fields to keep as-is without validation.
 
     Returns:
         The configuration file as a dictionary.
@@ -1670,7 +1696,7 @@ def read_config(config_file_path: Path) -> dict[str, object]:
     try:
         with open(config_file_path, "r", encoding="UTF-8") as file:
             raw_config = json.load(file)
-        config = validate_config(raw_config)
+        config = validate_config(raw_config, skip_fields=skip_fields)
 
     except (json.JSONDecodeError, ConfigurationError) as error:
         if _is_interactive_terminal():
@@ -1701,16 +1727,24 @@ def read_config(config_file_path: Path) -> dict[str, object]:
     return config
 
 
-def read_config_readonly(config_file_path: Path) -> dict[str, object]:
+def read_config_readonly(
+    config_file_path: Path,
+    *,
+    skip_fields: set[str] | None = None,
+) -> dict[str, object]:
     """
     Read the configuration file without writing changes.
 
     If the config is invalid or unreadable, fall back to defaults and emit a warning.
+
+    Args:
+        config_file_path: The path to the configuration file.
+        skip_fields: Config fields to keep as-is without validation.
     """
     try:
         with open(config_file_path, "r", encoding="UTF-8") as file:
             raw_config = json.load(file)
-        return validate_config(raw_config)
+        return validate_config(raw_config, skip_fields=skip_fields)
     except (json.JSONDecodeError, ConfigurationError, OSError) as error:
         click.echo(
             f"{WARNING_PREFIX} Config file {sanitize_path_for_error(config_file_path)} is unreadable or invalid "

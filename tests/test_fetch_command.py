@@ -478,6 +478,44 @@ def test_fetch_with_direct_png_path(
     assert re.search(r"!\[[0-9a-f]{32}\.png\]\(", result.output)
 
 
+def test_fetch_direct_path_skips_default_source_validation(
+    runner: CliRunner,
+    fake_home: Path,
+    tmp_path: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test direct image path does not force default source validation."""
+    real_source = tmp_path / "real_source"
+    real_source.mkdir()
+    symlink_source = tmp_path / "source_link"
+    symlink_source.symlink_to(real_source)
+
+    config_file.write_text(
+        json.dumps(
+            {
+                "default_source": str(symlink_source),
+                "default_destination": "",
+                "auto_stage_enabled": False,
+                "default_output_format": "markdown",
+                "default_convert_to": None,
+            }
+        )
+    )
+
+    image = create_screenshot(tmp_path, "myimage.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--destination", str(dest_dir), str(image)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    config_data = json.loads(config_file.read_text())
+    assert config_data["default_source"] == str(symlink_source)
+
+
 def test_fetch_with_direct_jpg_path(
     runner: CliRunner,
     fake_home: Path,
