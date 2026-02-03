@@ -1,3 +1,0 @@
-Added
------
-* Add config schema validation. Validates types and values, fills missing keys with defaults, and warns about unknown keys.
