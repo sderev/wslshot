@@ -4,7 +4,7 @@
 
 Take a screenshot using the Windows Snipping tool (`win + shift + S`), then run `wslshot` in your terminal to transfer the image.
 
-![demo](demo.gif)
+![demo](assets/images/demo.gif)
 
 <!-- TOC -->
 ## Table of Contents
@@ -13,6 +13,7 @@ Take a screenshot using the Windows Snipping tool (`win + shift + S`), then run 
 1. [Installation](#installation)
     1. [Install with `pip`](#install-with-pip)
     1. [Install with `uv`](#install-with-uv)
+1. [Quick Start](#quick-start)
 1. [Windows Configuration](#windows-configuration)
     1. [For Windows 11 Users](#for-windows-11-users)
     1. [For Windows 10 Users](#for-windows-10-users)
@@ -32,10 +33,12 @@ Take a screenshot using the Windows Snipping tool (`win + shift + S`), then run 
 * Set a default source directory for screenshots.
 * Designate a custom source or destination directory per operation, or let wslshot detect typical image directories automatically.
 * Fetch the most recent screenshot or specify a number of recent screenshots to fetch.
+* Print source paths without copying files using `--no-transfer`.
 * Control automatic staging of screenshots when copied to a git repository.
 * Convert screenshots to `png`, `jpg`/`jpeg`, `webp`, or `gif` during copy (flag or default).
 * Optimize copied screenshots in place without changing filenames or extensions.
 * Set a default output style (Markdown, HTML, text) and specify a custom style per operation.
+* Migrate legacy config values with `migrate-config --dry-run`.
 
 ## Installation
 
@@ -51,6 +54,15 @@ python3 -m pip install wslshot
 
 ```bash
 uv tool install wslshot
+```
+
+## Quick Start
+
+This assumes your Windows screenshots are already saved in a directory your Linux environment can access.
+
+```bash
+wslshot configure --source /path --destination /path
+wslshot
 ```
 
 ## Windows Configuration
@@ -115,6 +127,15 @@ This command allows you to set various options:
 * **`--convert-to` or `-c`**: Set the default image conversion format. Supported formats: png, jpg, jpeg, webp, gif. Conversion runs after copying; the converted file replaces the copied original. `jpeg` is treated as `jpg`. A CLI `--convert-to` flag overrides this default.
 
 These are default settings. Override them on a per-operation basis by providing the corresponding options when running the `wslshot` command.
+
+Migrate older configuration keys to the current names with `migrate-config`:
+
+```bash
+wslshot migrate-config --dry-run
+wslshot migrate-config
+```
+
+Use `--dry-run` to preview changes without writing the config file.
 
 ## Fetching Screenshots
 
@@ -211,7 +232,7 @@ If `wslshot` is in your PATH, call it with a filter command:
 :.!wslshot
 ```
 
-![vim demo](demo-vim.gif)
+![vim demo](assets/images/demo-vim.gif)
 
 ---
 

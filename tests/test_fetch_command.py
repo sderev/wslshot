@@ -881,6 +881,7 @@ def test_fetch_handles_plain_text_in_config_gracefully(
     source_dir: Path,
     dest_dir: Path,
     config_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test config with legacy `plain_text` format resets to defaults with warning."""
     create_screenshot(source_dir, "screenshot.png")
@@ -895,6 +896,8 @@ def test_fetch_handles_plain_text_in_config_gracefully(
     }
     with open(config_file, "w") as f:
         json.dump(config_data, f)
+
+    monkeypatch.chdir(source_dir)
 
     result = runner.invoke(
         cli.wslshot,
