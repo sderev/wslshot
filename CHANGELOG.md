@@ -21,6 +21,8 @@ Added
 Changed
 -------
 * **Breaking change:** `--output-style` is now the only output selector; deprecated `--output-format/-f` and `plain_text` output were removed—use `text`, `markdown`, or `html` instead.
+* Added `--optimize` to rewrite copied screenshots in place without changing filenames.
+* Added explicit conflicts for `--optimize` with `--no-transfer` and `--convert-to`.
 * Clarified `--convert-to` documentation so it's clear when conversions run, which formats are supported, and that converted files replace the originals.
 * Config is validated on load; invalid configurations are automatically fixed by resetting to defaults.
 

@@ -1,6 +1,6 @@
 # Windows Screenshot for Linux
 
-`wslshot` is a CLI tool designed to fetch the latest screenshot(s) from a directory shared with a Windows host, copy them to a designated directory in a Linux VM, and output their new Markdown-formatted paths.
+`wslshot` is a CLI tool designed to fetch the latest screenshot(s) from a directory shared with a Windows host, copy them to a designated directory in a Linux VM, and output their new paths in a configurable style (Markdown, HTML, or text).
 
 Take a screenshot using the Windows Snipping tool (`win + shift + S`), then run `wslshot` in your terminal to transfer the image.
 
@@ -10,6 +10,7 @@ Take a screenshot using the Windows Snipping tool (`win + shift + S`), then run 
 ## Table of Contents
 
 1. [Features](#features)
+1. [AI Agent Snippet](#ai-agent-snippet)
 1. [Installation](#installation)
     1. [Install with `pip`](#install-with-pip)
     1. [Install with `uv`](#install-with-uv)
@@ -39,6 +40,24 @@ Take a screenshot using the Windows Snipping tool (`win + shift + S`), then run 
 * Optimize copied screenshots in place without changing filenames or extensions.
 * Set a default output style (Markdown, HTML, text) and specify a custom style per operation.
 * Migrate legacy config values with `migrate-config --dry-run`.
+
+## AI Agent Snippet
+
+Nice thing to have in your `AGENTS.md`:
+
+```md
+## Screenshots ("use/look at a screenshot")
+* Run `wslshot -n <number> --no-transfer` to pick n screenshots.
+* Run `wslshot --optimize` to copy the latest screenshot and optimize it when preparing docs/images.
+```
+
+### Example
+
+```text
+Look at my last screenshot.
+```
+
+The agent will run `wslshot -n 1 --no-transfer` and inspect it.
 
 ## Installation
 
@@ -118,7 +137,7 @@ This command allows you to set various options:
 
 * **`--source` or `-s`**: This option lets you specify the default source directory where `wslshot` will look for screenshots.
 
-* **`--destination` or `-d`**: This option lets you specify the default destination directory where `wslshot` will copy screenshots.
+* **`--destination` or `-d`**: This option lets you specify the default destination directory where `wslshot` will copy screenshots. When running inside a git repository, this default is ignored unless you pass `--destination` on that command; otherwise, `wslshot` uses repository image directories (`/img/`, `/images/`, `/assets/img/`, `/assets/images/`) in that order.
 
 * **`--auto-stage-enabled`**: This option lets you control whether screenshots are automatically staged when copied to a git repository. By default, this option is set to `False`. If this option is set to `True`, any screenshot copied to a git repository will automatically be staged for commit.
 
@@ -170,6 +189,8 @@ wslshot --no-transfer
 
 This prints the source paths for the selected screenshots without copying files or interacting with git. Output defaults to text; override with `--output-style`.
 
+This mode rejects flags that require transfer (`--destination`, `--convert-to`, `--optimize`).
+
 **Convert screenshots to a different format**:
 
 ```bash
@@ -202,6 +223,11 @@ WARNING: Only use with trusted paths. By default, `wslshot` rejects symlinks for
 wslshot [--source /custom/source] [--destination /custom/destination] [--count 3] [--output-style HTML] [--no-transfer] [--convert-to png] [--optimize] [--allow-symlinks]
 ```
 
+Notes:
+
+* `--no-transfer` cannot be combined with `--destination`, `--convert-to`, or `--optimize`.
+* `--optimize` cannot be combined with `--convert-to`.
+
 ## Using a Specific Image Path
 
 Provide the path to a specific image as an argument:
@@ -214,7 +240,7 @@ Note that you can _drag and drop_ a file into the Windows Terminal to automatica
 
 ### Output
 
-Upon success, the command outputs the new path in Markdown format:
+Upon success, the command outputs the new path in your configured output style (Markdown by default). Override per run with `--output-style`:
 
 ```
 ![<uuid>.gif](/assets/images/<uuid>.gif)
@@ -223,6 +249,8 @@ Upon success, the command outputs the new path in Markdown format:
 ### File Copy Behavior
 
 The specified image is copied to your designated directory on the Linux VM.
+
+Supported source image formats are PNG, JPEG/JPG, and GIF.
 
 ## Vim Integration
 
