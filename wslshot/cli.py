@@ -977,7 +977,8 @@ def fetch(
         if destination:
             raise click.BadOptionUsage(
                 "--destination",
-                "has no effect with --no-transfer",
+                "--destination cannot be used with --no-transfer. Remove --destination or "
+                "omit --no-transfer.",
             )
     if convert_to and optimize:
         raise click.BadOptionUsage(
@@ -1563,8 +1564,12 @@ def stage_screenshots(screenshots: tuple[Path, ...], git_root: Path) -> None:
             except FileNotFoundError:
                 click.echo(f"{WARNING_PREFIX} Git not found; skipping auto-staging.", err=True)
                 return
-            except subprocess.CalledProcessError as e:
-                click.echo(f"{WARNING_PREFIX} Auto-staging failed for {screenshot}: {e}", err=True)
+            except subprocess.CalledProcessError:
+                click.echo(
+                    f"{WARNING_PREFIX} Auto-staging failed for {screenshot}; "
+                    "continuing without staging.",
+                    err=True,
+                )
                 if not hinted:
                     click.echo(
                         "Hint: Disable it with `wslshot configure --auto-stage-enabled false`, "
@@ -1656,7 +1661,11 @@ def get_config_file_path_or_exit(*, create_if_missing: bool = True) -> Path:
         click.echo(f"{SECURITY_ERROR_PREFIX} {error}", err=True)
         error_msg = str(error).lower()
         if "symlink" in error_msg:
-            click.echo("Hint: Remove the symlink and rerun `wslshot configure`.", err=True)
+            click.echo(
+                "Hint: Remove the symlink at ~/.config/wslshot/config.json, then rerun this "
+                "command.",
+                err=True,
+            )
         elif "different user" in error_msg:
             click.echo("Hint: Check directory ownership or use a different path.", err=True)
         sys.exit(1)

@@ -318,7 +318,7 @@ def test_no_transfer_with_destination_errors(
     )
 
     assert result.exit_code == 2
-    assert "has no effect with --no-transfer" in result.output
+    assert "--destination cannot be used with --no-transfer" in result.output
 
 
 # ============================================================================
