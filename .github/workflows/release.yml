@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   build:
@@ -38,6 +37,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: "!github.event.release.prerelease"
+    permissions:
+      contents: read
+      id-token: write
     environment:
       name: release
       url: https://pypi.org/project/wslshot/
@@ -48,7 +50,26 @@ jobs:
           name: dist-${{ github.run_id }}
           path: dist/
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          print-hash: true
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Check release tag
+        id: stable_tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ "$TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "publish=true" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::notice::Skipping publish for non-stable tag: $TAG"
+          echo "publish=false" >>"$GITHUB_OUTPUT"
+
+      - name: Publish to PyPI with uv
+        if: steps.stable_tag.outputs.publish == 'true'
+        run: uv publish --trusted-publishing always --check-url https://pypi.org/simple
