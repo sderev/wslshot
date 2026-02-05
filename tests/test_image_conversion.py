@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from wslshot.cli import convert_image_format
+from wslshot.cli import convert_image_format, optimize_image
 
 
 class TestImageConversion:
@@ -166,3 +166,24 @@ class TestImageConversion:
 
         with pytest.raises(ValueError, match="Failed to convert image"):
             convert_image_format(corrupt_path, "jpg")
+
+    def test_optimize_png_in_place(self, tmp_path: Path) -> None:
+        """Test optimizing PNG preserves path and extension."""
+        png_path = tmp_path / "test.png"
+        img = Image.new("RGB", (100, 100), color="teal")
+        img.save(png_path, "PNG")
+
+        optimized_path = optimize_image(png_path)
+
+        assert optimized_path == png_path
+        assert optimized_path.exists()
+        with Image.open(optimized_path) as optimized:
+            assert optimized.format == "PNG"
+
+    def test_optimize_unsupported_format_raises_error(self, tmp_path: Path) -> None:
+        """Test optimizing unsupported extension fails."""
+        bmp_path = tmp_path / "test.bmp"
+        Image.new("RGB", (50, 50), color="white").save(bmp_path, "BMP")
+
+        with pytest.raises(ValueError, match="Unsupported source format for optimization"):
+            optimize_image(bmp_path)

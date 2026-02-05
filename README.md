@@ -34,6 +34,7 @@ Take a screenshot using the Windows Snipping tool (`win + shift + S`), then run 
 * Fetch the most recent screenshot or specify a number of recent screenshots to fetch.
 * Control automatic staging of screenshots when copied to a git repository.
 * Convert screenshots to `png`, `jpg`/`jpeg`, `webp`, or `gif` during copy (flag or default).
+* Optimize copied screenshots in place without changing filenames or extensions.
 * Set a default output style (Markdown, HTML, text) and specify a custom style per operation.
 
 ## Installation
@@ -156,6 +157,16 @@ wslshot --convert-to png
 
 This converts the screenshot(s) to the specified format. Supported formats: png, jpg, jpeg, webp, gif. If a default conversion is set in configuration, it runs when no flag is provided. Conversion happens after copying, and the converted file replaces the copied original. If auto-staging is enabled in a git repository, only the converted file is staged. Conversion is skipped only when the copied file already has the target extension; `.jpeg` files are rewritten to `.jpg`. Conversion applies both to the latest-screenshot workflow and when you pass a specific image path.
 
+**Optimize copied screenshots in place**:
+
+```bash
+wslshot --optimize
+```
+
+This optimizes copied screenshots after transfer and rewrites destination files in place. Source files are never modified. Optimization preserves each copied file's extension. If a default conversion format is configured, `--optimize` takes precedence for that run and skips conversion.
+
+`--optimize` conflicts with `--no-transfer` and `--convert-to`.
+
 **Allow symlinks (security risk)**:
 
 ```bash
@@ -167,7 +178,7 @@ WARNING: Only use with trusted paths. By default, `wslshot` rejects symlinks for
 **These are all the possible options**:
 
 ```bash
-wslshot [--source /custom/source] [--destination /custom/destination] [--count 3] [--output-style HTML] [--no-transfer] [--convert-to png] [--allow-symlinks]
+wslshot [--source /custom/source] [--destination /custom/destination] [--count 3] [--output-style HTML] [--no-transfer] [--convert-to png] [--optimize] [--allow-symlinks]
 ```
 
 ## Using a Specific Image Path

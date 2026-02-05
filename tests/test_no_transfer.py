@@ -274,6 +274,26 @@ def test_no_transfer_with_convert_to_errors(
     assert "--no-transfer" in result.output
 
 
+def test_no_transfer_with_optimize_errors(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test --no-transfer + --optimize produces error."""
+    create_screenshot(source_dir, "screenshot.png")
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--no-transfer", "--optimize"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 2
+    assert "requires file transfer" in result.output
+    assert "--no-transfer" in result.output
+
+
 def test_no_transfer_with_destination_errors(
     runner: CliRunner,
     fake_home: Path,

@@ -921,6 +921,12 @@ def wslshot():
     help="Convert copied screenshots to this format (png, jpg/jpeg, webp, gif).",
 )
 @click.option(
+    "--optimize",
+    is_flag=True,
+    default=False,
+    help="Optimize copied screenshots in place (writes destination files; never source files).",
+)
+@click.option(
     "--allow-symlinks",
     is_flag=True,
     default=False,
@@ -934,7 +940,15 @@ def wslshot():
 )
 @click.argument("image_path", type=click.Path(exists=True), required=False)
 def fetch(
-    source, destination, count, output_format, convert_to, allow_symlinks, no_transfer, image_path
+    source,
+    destination,
+    count,
+    output_format,
+    convert_to,
+    optimize,
+    allow_symlinks,
+    no_transfer,
+    image_path,
 ):
     """
     Copy screenshots into the destination directory and print their copied paths.
@@ -944,6 +958,7 @@ def fetch(
       wslshot fetch
       wslshot fetch --count 5
       wslshot fetch --convert-to webp
+      wslshot fetch --optimize
       wslshot fetch --no-transfer
       wslshot fetch "<...>/screenshot.png"
     """
@@ -954,11 +969,21 @@ def fetch(
                 "--convert-to",
                 "requires file transfer; cannot combine with --no-transfer",
             )
+        if optimize:
+            raise click.BadOptionUsage(
+                "--optimize",
+                "requires file transfer; cannot combine with --no-transfer",
+            )
         if destination:
             raise click.BadOptionUsage(
                 "--destination",
                 "has no effect with --no-transfer",
             )
+    if convert_to and optimize:
+        raise click.BadOptionUsage(
+            "--optimize",
+            "cannot combine with --convert-to",
+        )
 
     skip_fields = {"default_source"} if image_path else None
 
@@ -1106,7 +1131,7 @@ def fetch(
         sys.exit(1)
 
     # Convert format
-    if convert_to is None and config.get("default_convert_to"):
+    if convert_to is None and not optimize and config.get("default_convert_to"):
         convert_to = config["default_convert_to"]
 
     # If the user specified an image path, copy it to the destination directory.
@@ -1188,6 +1213,17 @@ def fetch(
                 click.secho(f"Error: {sanitized_error}", fg="red", err=True)
                 sys.exit(1)
         copied_screenshots = converted_screenshots
+    elif optimize:
+        optimized_screenshots: tuple[Path, ...] = ()
+        for screenshot in copied_screenshots:
+            try:
+                optimized_path = optimize_image(screenshot)
+                optimized_screenshots += (optimized_path,)
+            except ValueError as error:
+                sanitized_error = sanitize_error_message(str(error), (screenshot,))
+                click.secho(f"Error: {sanitized_error}", fg="red", err=True)
+                sys.exit(1)
+        copied_screenshots = optimized_screenshots
 
     relative_screenshots: tuple[Path, ...] = ()
     git_root: Path | None = None
@@ -1448,6 +1484,48 @@ def convert_image_format(source_path: Path, target_format: str) -> Path:
         sanitized_error = sanitize_error_message(str(e), (source_path, new_path))
         sanitized_path = sanitize_path_for_error(source_path)
         raise ValueError(f"Failed to convert image {sanitized_path}: {sanitized_error}") from e
+
+
+def optimize_image(source_path: Path) -> Path:
+    """
+    Optimize an image in place while preserving filename and extension.
+
+    Args:
+    - source_path: Path to the copied destination image file.
+
+    Returns:
+    - Path to the optimized image (same as source path).
+
+    Raises:
+    - ValueError: If optimization fails or source format is unsupported.
+    """
+    source_format = source_path.suffix.lower().replace(".", "")
+    if source_format not in {"png", "jpg", "jpeg", "gif"}:
+        raise ValueError(f"Unsupported source format for optimization: {source_format}")
+
+    try:
+        with Image.open(source_path) as img:
+            if source_format in {"jpg", "jpeg"}:
+                if img.mode in ("RGBA", "LA", "P"):
+                    rgb_img = Image.new("RGB", img.size, (255, 255, 255))
+                    if img.mode == "P":
+                        img = img.convert("RGBA")
+                    rgb_img.paste(
+                        img,
+                        mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None,
+                    )
+                    img = rgb_img
+                img.save(source_path, "JPEG", quality=IMAGE_SAVE_QUALITY, optimize=True)
+            elif source_format == "png":
+                img.save(source_path, "PNG", optimize=True)
+            elif source_format == "gif":
+                img.save(source_path, "GIF", optimize=True)
+
+        return source_path
+    except Exception as e:
+        sanitized_error = sanitize_error_message(str(e), (source_path,))
+        sanitized_path = sanitize_path_for_error(source_path)
+        raise ValueError(f"Failed to optimize image {sanitized_path}: {sanitized_error}") from e
 
 
 def stage_screenshots(screenshots: tuple[Path, ...], git_root: Path) -> None:

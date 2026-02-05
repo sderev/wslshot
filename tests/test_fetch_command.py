@@ -1697,6 +1697,43 @@ def test_fetch_convert_to_cli_overrides_config(
     assert len(webp_files) == 0
 
 
+def test_fetch_optimize_overrides_config_default_convert_to(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that CLI --optimize skips config default_convert_to."""
+    config_file.write_text(
+        json.dumps(
+            {
+                "default_source": str(source_dir),
+                "default_destination": str(dest_dir),
+                "auto_stage_enabled": False,
+                "default_output_format": "markdown",
+                "default_convert_to": "webp",
+            }
+        )
+    )
+
+    create_real_image(source_dir, "screenshot.png", "PNG")
+    monkeypatch.setattr(cli, "is_git_repo", lambda: False)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--optimize"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    png_files = list(dest_dir.glob("*.png"))
+    assert len(png_files) == 1
+    webp_files = list(dest_dir.glob("*.webp"))
+    assert len(webp_files) == 0
+
+
 def test_fetch_convert_to_output_path_correct(
     runner: CliRunner,
     fake_home: Path,
@@ -1755,3 +1792,61 @@ def test_fetch_convert_to_no_conversion_when_same_format(
     # Should still have PNG file (no conversion needed)
     png_files = list(dest_dir.glob("*.png"))
     assert len(png_files) == 1
+
+
+def test_fetch_with_convert_to_and_optimize_errors(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test --convert-to + --optimize produces a conflict error."""
+    create_real_image(source_dir, "screenshot.png", "PNG")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--convert-to",
+            "jpg",
+            "--optimize",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 2
+    assert "cannot combine with --convert-to" in result.output
+
+
+def test_fetch_with_optimize_keeps_extension(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    dest_dir: Path,
+    config_file: Path,
+) -> None:
+    """Test --optimize rewrites copied files without changing extension."""
+    create_real_image(source_dir, "screenshot.png", "PNG")
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--optimize",
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    copied_pngs = list(dest_dir.glob("*.png"))
+    assert len(copied_pngs) == 1
+    assert ".png" in result.output
