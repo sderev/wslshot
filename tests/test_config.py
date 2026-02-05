@@ -1015,15 +1015,15 @@ class TestGetValidatedDirectoryInput:
         monkeypatch.setattr(cli, "get_config_input", mock_get_config_input)
         monkeypatch.setattr(
             "click.echo",
-            lambda msg=None, **kwargs: error_messages.append(msg)
-            if msg and kwargs.get("err")
-            else None,
+            lambda msg=None, **kwargs: (
+                error_messages.append(msg) if msg and kwargs.get("err") else None
+            ),
         )
         monkeypatch.setattr(
             "click.secho",
-            lambda msg=None, **kwargs: error_messages.append(msg)
-            if msg and kwargs.get("err")
-            else None,
+            lambda msg=None, **kwargs: (
+                error_messages.append(msg) if msg and kwargs.get("err") else None
+            ),
         )
 
         result = cli.get_validated_directory_input("test_field", "Enter directory", {}, "")
@@ -1334,9 +1334,9 @@ class TestConfigPermissionEnforcement:
         monkeypatch.setattr(sys, "exit", mock_exit)
         monkeypatch.setattr(
             "click.echo",
-            lambda msg=None, **kwargs: error_messages.append(msg)
-            if msg and kwargs.get("err")
-            else None,
+            lambda msg=None, **kwargs: (
+                error_messages.append(msg) if msg and kwargs.get("err") else None
+            ),
         )
 
         with pytest.raises(SystemExit):
@@ -1367,9 +1367,9 @@ class TestConfigPermissionEnforcement:
         monkeypatch.setattr(sys, "exit", mock_exit)
         monkeypatch.setattr(
             "click.echo",
-            lambda msg=None, **kwargs: error_messages.append(msg)
-            if msg and kwargs.get("err")
-            else None,
+            lambda msg=None, **kwargs: (
+                error_messages.append(msg) if msg and kwargs.get("err") else None
+            ),
         )
 
         with pytest.raises(SystemExit):
@@ -1399,9 +1399,9 @@ class TestConfigPermissionEnforcement:
         monkeypatch.setattr(sys, "exit", mock_exit)
         monkeypatch.setattr(
             "click.echo",
-            lambda msg=None, **kwargs: error_messages.append(msg)
-            if msg and kwargs.get("err")
-            else None,
+            lambda msg=None, **kwargs: (
+                error_messages.append(msg) if msg and kwargs.get("err") else None
+            ),
         )
 
         with pytest.raises(SystemExit):
