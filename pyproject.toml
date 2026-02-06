@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "wslshot"
-version = "0.1.0"
+version = "0.1.1"
 description = "Copy Windows screenshots into WSL for easy reuse."
 readme = "README.md"
 license = "Apache-2.0"
