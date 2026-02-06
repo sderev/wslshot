@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import stat
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -1311,104 +1310,53 @@ class TestConfigPermissionEnforcement:
         captured = capsys.readouterr()
         assert "Config file permissions were too open (0o666)" in captured.err
 
-    def test_config_write_rejects_symlinks(
-        self, fake_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Reject writing config when path is a symlink."""
+    def test_config_write_updates_symlink_target(self, fake_home: Path, tmp_path: Path) -> None:
+        """Writing config through a symlink should update the target file."""
         config_path = fake_home / ".config" / "wslshot" / "config.json"
         target = tmp_path / "real_config.json"
-        target.write_text("{}", encoding="UTF-8")
+        target.write_text(json.dumps(cli.DEFAULT_CONFIG), encoding="UTF-8")
         if config_path.exists():
             config_path.unlink()
         config_path.symlink_to(target)
 
-        new_source = tmp_path
+        new_source = tmp_path / "source"
+        new_source.mkdir()
+        cli.set_default_source(str(new_source))
 
-        exit_codes: list[int] = []
+        assert config_path.is_symlink()
+        config_data = json.loads(target.read_text(encoding="UTF-8"))
+        assert config_data["default_source"] == str(new_source.resolve())
 
-        def mock_exit(code: int) -> None:
-            exit_codes.append(code)
-            raise SystemExit(code)
-
-        error_messages: list[str] = []
-        monkeypatch.setattr(sys, "exit", mock_exit)
-        monkeypatch.setattr(
-            "click.echo",
-            lambda msg=None, **kwargs: (
-                error_messages.append(msg) if msg and kwargs.get("err") else None
-            ),
-        )
-
-        with pytest.raises(SystemExit):
-            cli.set_default_source(str(new_source))
-
-        assert exit_codes == [1]
-        assert any("Config file is a symlink" in str(msg) for msg in error_messages)
-
-    def test_config_write_rejects_broken_symlinks(
-        self, fake_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_config_write_supports_broken_symlink_target(
+        self, fake_home: Path, tmp_path: Path
     ) -> None:
-        """Reject writing config when path is a broken symlink."""
+        """Writing config should recreate a missing symlink target file."""
         config_path = fake_home / ".config" / "wslshot" / "config.json"
         target = tmp_path / "missing.json"
         if config_path.exists():
             config_path.unlink()
         config_path.symlink_to(target)
 
-        new_source = tmp_path
+        new_source = tmp_path / "source"
+        new_source.mkdir()
+        cli.set_default_source(str(new_source))
 
-        exit_codes: list[int] = []
+        assert config_path.is_symlink()
+        assert target.exists()
+        config_data = json.loads(target.read_text(encoding="UTF-8"))
+        assert config_data["default_source"] == str(new_source.resolve())
 
-        def mock_exit(code: int) -> None:
-            exit_codes.append(code)
-            raise SystemExit(code)
-
-        error_messages: list[str] = []
-        monkeypatch.setattr(sys, "exit", mock_exit)
-        monkeypatch.setattr(
-            "click.echo",
-            lambda msg=None, **kwargs: (
-                error_messages.append(msg) if msg and kwargs.get("err") else None
-            ),
-        )
-
-        with pytest.raises(SystemExit):
-            cli.set_default_source(str(new_source))
-
-        assert exit_codes == [1]
-        assert any("Config file is a symlink" in str(msg) for msg in error_messages)
-
-    def test_get_config_path_or_exit_rejects_symlink(
-        self, fake_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Ensure helper exits cleanly when config path is a symlink."""
+    def test_get_config_path_or_exit_allows_symlink(self, fake_home: Path, tmp_path: Path) -> None:
+        """Helper should allow symlinked config files."""
         config_path = fake_home / ".config" / "wslshot" / "config.json"
         target = tmp_path / "real_config.json"
-        target.write_text("{}", encoding="UTF-8")
+        target.write_text(json.dumps(cli.DEFAULT_CONFIG), encoding="UTF-8")
         if config_path.exists():
             config_path.unlink()
         config_path.symlink_to(target)
 
-        exit_codes: list[int] = []
-
-        def mock_exit(code: int) -> None:
-            exit_codes.append(code)
-            raise SystemExit(code)
-
-        error_messages: list[str] = []
-        monkeypatch.setattr(sys, "exit", mock_exit)
-        monkeypatch.setattr(
-            "click.echo",
-            lambda msg=None, **kwargs: (
-                error_messages.append(msg) if msg and kwargs.get("err") else None
-            ),
-        )
-
-        with pytest.raises(SystemExit):
-            cli.get_config_file_path_or_exit()
-
-        assert exit_codes == [1]
-        assert any("Config file is a symlink" in str(msg) for msg in error_messages)
+        resolved = cli.get_config_file_path_or_exit()
+        assert resolved == config_path
 
     def test_chmod_failure_still_writes_with_correct_permissions(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

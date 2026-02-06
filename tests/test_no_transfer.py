@@ -8,6 +8,7 @@ creating directories, or triggering Git integration.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -370,6 +371,31 @@ def test_no_transfer_validates_images_in_source_dir(
     assert "valid.png" in result.output
     # Warning about invalid file should appear in stderr
     assert "Skipping invalid image file" in result.output
+
+
+def test_no_transfer_ignores_stale_invalid_files(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    config_file: Path,
+) -> None:
+    """Older invalid files should not warn when a newer valid screenshot satisfies the count."""
+    stale_invalid = source_dir / "stale.png"
+    stale_invalid.write_text("not an image", encoding="UTF-8")
+    os.utime(stale_invalid, (1700000000, 1700000000))
+
+    newest = create_screenshot(source_dir, "newest.png")
+    os.utime(newest, (1700000010, 1700000010))
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--no-transfer", "--count", "1"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert "newest.png" in result.output
+    assert "Skipping invalid image file" not in result.output
 
 
 def test_no_transfer_prints_absolute_paths(

@@ -17,7 +17,6 @@ Features:
 For detailed usage instructions, use 'wslshot --help' or 'wslshot [command] --help'.
 """
 
-import heapq
 import json
 import os
 import shutil
@@ -272,9 +271,10 @@ def _next_available_backup_path(path: Path, *, suffix: str) -> Path:
 def _backup_corrupted_file_or_warn(config_file_path: Path) -> None:
     backup_path: Path | None = None
     try:
-        backup_path = _next_available_backup_path(config_file_path, suffix=".corrupted")
-        config_file_path.replace(backup_path)
-    except OSError as backup_error:
+        config_data_path = resolve_config_data_path(config_file_path)
+        backup_path = _next_available_backup_path(config_data_path, suffix=".corrupted")
+        config_data_path.replace(backup_path)
+    except (OSError, SecurityError) as backup_error:
         sanitized = sanitize_error_message(
             str(backup_error),
             (config_file_path, backup_path) if backup_path is not None else (config_file_path,),
@@ -352,24 +352,26 @@ def write_config_safely(config_file_path: Path, config_data: dict[str, object]) 
     """
     Write configuration data while enforcing secure permissions.
 
-    Rejects symlinked config paths to prevent privilege escalation via symlink swaps.
-    Attempts to fix insecure permissions on existing files (best-effort); if chmod
-    fails, the atomic write is still attempted since it creates a fresh file with
-    correct permissions.
+    Attempts to fix insecure permissions on existing files (best-effort); if chmod fails,
+    the atomic write is still attempted since it creates a fresh file with correct
+    permissions.
+
+    Symlinked config files are supported for dotfile manager workflows (for example
+    GNU Stow). When the config path is a symlink, writes target the symlink target
+    path and preserve the symlink itself.
 
     Args:
         config_file_path: Path to config file
         config_data: Configuration dictionary to write
 
     Raises:
-        SecurityError: If the config path is a symlink
+        SecurityError: If the resolved config path is invalid
         OSError: If the atomic write fails
     """
-    if config_file_path.is_symlink():
-        raise SecurityError("Config file is a symlink; refusing to write for safety.")
+    config_data_path = resolve_config_data_path(config_file_path)
 
-    if config_file_path.exists():
-        current_perms = config_file_path.stat().st_mode & FILE_PERMISSION_MASK
+    if config_data_path.exists():
+        current_perms = config_data_path.stat().st_mode & FILE_PERMISSION_MASK
         if current_perms != CONFIG_FILE_PERMISSIONS:
             click.echo(
                 f"{WARNING_PREFIX} Config file permissions were too open ({oct(current_perms)}). "
@@ -377,18 +379,39 @@ def write_config_safely(config_file_path: Path, config_data: dict[str, object]) 
                 err=True,
             )
             try:
-                config_file_path.chmod(CONFIG_FILE_PERMISSIONS)
+                config_data_path.chmod(CONFIG_FILE_PERMISSIONS)
             except OSError as error:
                 # Best-effort: warn but proceed with atomic write
                 # The atomic replace will create a new file with correct permissions
-                sanitized = sanitize_error_message(str(error), (config_file_path,))
+                sanitized = sanitize_error_message(str(error), (config_data_path,))
                 click.echo(
                     f"{WARNING_PREFIX} Could not fix permissions ({sanitized}); "
                     "atomic write will replace with secure file.",
                     err=True,
                 )
 
-    atomic_write_json(config_file_path, config_data, mode=CONFIG_FILE_PERMISSIONS)
+    atomic_write_json(config_data_path, config_data, mode=CONFIG_FILE_PERMISSIONS)
+
+
+def resolve_config_data_path(config_file_path: Path) -> Path:
+    """
+    Resolve the effective config data path, following symlinks when present.
+
+    This keeps symlink-based dotfile layouts working while still rejecting invalid
+    targets like directories or symlink loops.
+    """
+    if not config_file_path.is_symlink():
+        return config_file_path
+
+    try:
+        resolved_path = config_file_path.resolve(strict=False)
+    except RuntimeError as error:
+        raise SecurityError("Config file symlink loop detected; refusing to use it.") from error
+
+    if resolved_path.exists() and resolved_path.is_dir():
+        raise SecurityError("Config file symlink target is a directory; refusing to use it.")
+
+    return resolved_path
 
 
 def write_config_or_exit(config_file_path: Path, config_data: dict[str, object]) -> None:
@@ -1268,8 +1291,8 @@ def get_screenshots(
     # Get the most recent screenshot(s) from the source directory.
     try:
         # Use scandir for efficient directory iteration (single directory scan)
-        # Stat each file exactly once and cache the result
-        file_stats = []
+        # Keep metadata so we can validate newest candidates first.
+        candidates: list[tuple[float, Path, int]] = []
         with os.scandir(source) as entries:
             for entry in entries:
                 # Check extension before stat (cheap filter)
@@ -1285,29 +1308,34 @@ def get_screenshots(
                             )
                             continue
                         # Stat once and check if it's a regular file
-                        stat_result = file_path.stat()
+                        stat_result = entry.stat()
                         if S_ISREG(stat_result.st_mode):
-                            # SECURITY: Validate file content, not just extension (PERSO-193 - CWE-434)
-                            try:
-                                validate_image_file(
-                                    file_path,
-                                    max_size_bytes=max_file_size_bytes,
-                                    file_size=stat_result.st_size,
-                                )
-                                file_stats.append((file_path, stat_result.st_mtime))
-                            except ValueError as e:
-                                # Graceful degradation: skip invalid files with warning
-                                click.echo(
-                                    f"{WARNING_PREFIX} Skipping invalid image file: {e}",
-                                    err=True,
-                                )
+                            candidates.append(
+                                (stat_result.st_mtime, file_path, stat_result.st_size)
+                            )
                     except OSError:
                         # Skip files we can't stat (broken symlinks, permission issues, etc.)
                         pass
 
-        # Use heapq for efficient partial sorting: O(N log count) instead of O(N log N)
-        top_files = heapq.nlargest(count, file_stats, key=lambda x: x[1])
-        screenshots = [file for file, _ in top_files]
+        # Validate newest candidates first so stale invalid files don't affect routine runs.
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        screenshots: list[Path] = []
+        for _, file_path, file_size in candidates:
+            try:
+                validate_image_file(
+                    file_path,
+                    max_size_bytes=max_file_size_bytes,
+                    file_size=file_size,
+                )
+                screenshots.append(file_path)
+                if len(screenshots) == count:
+                    break
+            except ValueError as e:
+                # Graceful degradation: skip invalid files with warning
+                click.echo(
+                    f"{WARNING_PREFIX} Skipping invalid image file: {e}",
+                    err=True,
+                )
 
         sanitized_source = sanitize_path_for_error(source)
 
@@ -1640,8 +1668,9 @@ def get_config_file_path(*, create_if_missing: bool = True) -> Path:
     config_dir = Path.home() / CONFIG_DIR_RELATIVE
     config_file_path = config_dir / CONFIG_FILE_NAME
 
+    # Validate symlink target shape early for clearer errors.
     if config_file_path.is_symlink():
-        raise SecurityError("Config file is a symlink; refusing to use it.")
+        resolve_config_data_path(config_file_path)
 
     if create_if_missing:
         create_directory_safely(config_file_path.parent, mode=CONFIG_DIR_PERMISSIONS)
@@ -1660,12 +1689,13 @@ def get_config_file_path_or_exit(*, create_if_missing: bool = True) -> Path:
     except SecurityError as error:
         click.echo(f"{SECURITY_ERROR_PREFIX} {error}", err=True)
         error_msg = str(error).lower()
-        if "symlink" in error_msg:
+        if "symlink loop" in error_msg:
             click.echo(
-                "Hint: Remove the symlink at ~/.config/wslshot/config.json, then rerun this "
-                "command.",
+                "Hint: Fix the symlink at ~/.config/wslshot/config.json, then rerun this command.",
                 err=True,
             )
+        elif "directory" in error_msg:
+            click.echo("Hint: Point ~/.config/wslshot/config.json to a regular file.", err=True)
         elif "different user" in error_msg:
             click.echo("Hint: Check directory ownership or use a different path.", err=True)
         sys.exit(1)

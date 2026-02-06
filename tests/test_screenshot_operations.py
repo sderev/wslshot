@@ -586,74 +586,51 @@ def test_generate_screenshot_name_lowercases_extension(monkeypatch: pytest.Monke
         assert result == expected_name
 
 
-# ==================== Heapq Optimization Tests ====================
+# ==================== Candidate Validation Tests ====================
 
 
-def test_get_screenshots_uses_heapq_nlargest(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_get_screenshots_skips_stale_invalid_files_without_warning(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Test that get_screenshots uses heapq.nlargest instead of list.sort for efficiency."""
-    import heapq
-
+    """Older invalid files should not emit warnings when newer valid files satisfy the request."""
     source = tmp_path / "source"
     source.mkdir()
 
-    # Create 10 files
-    for i in range(10):
-        create_test_image(source / f"screenshot_{i}.png")
+    stale_invalid = source / "stale.png"
+    stale_invalid.write_text("not an image", encoding="UTF-8")
+    os.utime(stale_invalid, (1700000000, 1700000000))
 
-    # Track heapq.nlargest calls
-    original_nlargest = heapq.nlargest
-    nlargest_calls = []
+    newest_valid = source / "newest.png"
+    create_test_image(newest_valid)
+    os.utime(newest_valid, (1700000010, 1700000010))
 
-    def tracked_nlargest(*args, **kwargs):
-        nlargest_calls.append((args, kwargs))
-        return original_nlargest(*args, **kwargs)
+    result = cli.get_screenshots(source, count=1)
+    captured = capsys.readouterr()
 
-    monkeypatch.setattr(heapq, "nlargest", tracked_nlargest)
-
-    # Get 5 screenshots
-    cli.get_screenshots(source, count=5)
-
-    # Verify heapq.nlargest was called
-    assert len(nlargest_calls) == 1
-    assert nlargest_calls[0][0][0] == 5  # First arg should be count=5
+    assert result == (newest_valid,)
+    assert "Skipping invalid image file" not in captured.err
 
 
-def test_get_screenshots_caches_stat_calls(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that get_screenshots only calls stat() once per file (caching)."""
+def test_get_screenshots_warns_for_invalid_newest_candidate(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Invalid files should still warn when they are among the newest candidates."""
     source = tmp_path / "source"
     source.mkdir()
 
-    # Create 10 files
-    files = []
-    for i in range(10):
-        file = source / f"screenshot_{i}.png"
-        create_test_image(file)
-        files.append(file)
+    newest_invalid = source / "newest.png"
+    newest_invalid.write_text("not an image", encoding="UTF-8")
+    os.utime(newest_invalid, (1700000020, 1700000020))
 
-    # Track stat calls
-    original_stat = Path.stat
-    stat_calls = []
+    second_newest_valid = source / "valid.png"
+    create_test_image(second_newest_valid)
+    os.utime(second_newest_valid, (1700000010, 1700000010))
 
-    def tracked_stat(self, **kwargs):
-        stat_calls.append(str(self))
-        # Handle both Python < 3.13 (no follow_symlinks) and >= 3.13 (with follow_symlinks)
-        try:
-            return original_stat(self, **kwargs)
-        except TypeError:
-            # Older Python versions don't accept follow_symlinks
-            return original_stat(self)
+    result = cli.get_screenshots(source, count=1)
+    captured = capsys.readouterr()
 
-    monkeypatch.setattr(Path, "stat", tracked_stat)
-
-    # Get 5 screenshots
-    cli.get_screenshots(source, count=5)
-
-    # Each file is stat'd once thanks to reusing stat results in validation
-    assert len(stat_calls) == 10
-    # Verify each file is stat'd exactly once (not more)
-    assert len(set(stat_calls)) == 10
+    assert result == (second_newest_valid,)
+    assert "Skipping invalid image file" in captured.err
 
 
 def test_get_screenshots_count_exceeds_available(tmp_path: Path) -> None:
