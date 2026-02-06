@@ -8,6 +8,14 @@ For versions ≤0.0.12, see [GitHub Releases](https://github.com/sderev/wslshot/
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.1.1'></a>
+## 0.1.1 - 2026-02-06
+
+Fixed
+-----
+* Allowed `~/.config/wslshot/config.json` to be a symlink and kept writes on its target file.
+* Changed screenshot discovery to validate newest candidates first, so stale invalid files no longer spam warnings on routine runs.
+
 <a id='changelog-0.1.0'></a>
 ## 0.1.0 - 2026-02-03
 
