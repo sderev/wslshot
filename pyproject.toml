@@ -13,7 +13,7 @@ requires-python = ">=3.10"
 dependencies = [
     "click>=8.3.0",
     "click-default-group>=1.2.4",
-    "Pillow>=10.0.0",
+    "Pillow>=12.1.1",
 ]
 
 [dependency-groups]
