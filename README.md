@@ -137,7 +137,7 @@ This command allows you to set various options:
 
 * **`--source` or `-s`**: This option lets you specify the default source directory where `wslshot` will look for screenshots.
 
-* **`--destination` or `-d`**: This option lets you specify the default destination directory where `wslshot` will copy screenshots. When running inside a git repository, this default is ignored unless you pass `--destination` on that command; otherwise, `wslshot` uses repository image directories (`/img/`, `/images/`, `/assets/img/`, `/assets/images/`) in that order.
+* **`--destination` or `-d`**: This option lets you specify the default destination directory where `wslshot` will copy screenshots. When no destination is passed on the command line, this configured default is used before git repository image directories. If neither a command-line nor configured destination is set, `wslshot` uses repository image directories (`/img/`, `/images/`, `/assets/img/`, `/assets/images/`) in that order when running inside a git repository.
 
 * **`--auto-stage-enabled`**: This option lets you control whether screenshots are automatically staged when copied to a git repository. By default, this option is set to `False`. If this option is set to `True`, any screenshot copied to a git repository will automatically be staged for commit.
 
@@ -164,7 +164,7 @@ Use `--dry-run` to preview changes without writing the config file.
 wslshot
 ```
 
-This fetches the most recent screenshot from the source directory. If run inside a git repository, wslshot looks for an existing image directory (checked in priority order) and copies the screenshot there. If none exists, it creates `/assets/images/`.
+This fetches the most recent screenshot from the source directory. If no destination is configured and the command runs inside a git repository, wslshot looks for an existing image directory (checked in priority order) and copies the screenshot there. If none exists, it creates `/assets/images/`.
 
 **Directories checked in priority order**:
 

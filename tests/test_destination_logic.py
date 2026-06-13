@@ -31,8 +31,8 @@ def test_get_destination_returns_git_when_in_repo(fake_home, tmp_path, monkeypat
     assert result == git_dest
 
 
-def test_get_destination_prefers_git_over_config(fake_home, tmp_path, monkeypatch):
-    """Test git destination takes priority over config default_destination."""
+def test_get_destination_prefers_config_over_git(fake_home, tmp_path, monkeypatch):
+    """Test config default_destination takes priority over git destination."""
     # Setup config with default_destination
     config_dest = tmp_path / "from_config"
     config_dest.mkdir()
@@ -55,7 +55,8 @@ def test_get_destination_prefers_git_over_config(fake_home, tmp_path, monkeypatc
     monkeypatch.setattr(cli, "get_git_repo_img_destination", lambda: git_dest)
 
     result = cli.get_destination()
-    assert result == git_dest  # Git wins over config
+    assert result == config_dest
+    assert result != git_dest
 
 
 def test_get_destination_calls_git_repo_img_destination_when_in_repo(
@@ -234,8 +235,8 @@ def test_get_destination_returns_cwd_when_config_default_is_empty_string(
     assert result == cwd_dir
 
 
-def test_get_destination_priority_cascade_git_wins_over_config(fake_home, tmp_path, monkeypatch):
-    """Test complete priority cascade: git wins over config."""
+def test_get_destination_priority_cascade_config_wins_over_git(fake_home, tmp_path, monkeypatch):
+    """Test complete priority cascade: config wins over git and cwd."""
     # Setup config with default_destination
     config_dest = tmp_path / "from_config"
     config_dest.mkdir()
@@ -263,9 +264,9 @@ def test_get_destination_priority_cascade_git_wins_over_config(fake_home, tmp_pa
     monkeypatch.chdir(cwd_dir)
 
     result = cli.get_destination()
-    # Git wins over both config and cwd
-    assert result == git_dest
-    assert result != config_dest
+    # Config wins over git and cwd.
+    assert result == config_dest
+    assert result != git_dest
     assert result != Path.cwd()
 
 
