@@ -1109,8 +1109,12 @@ def fetch(
         return
 
     # Destination directory
+    destination_was_git_autodetected = False
     if destination is None:
         try:
+            destination_was_git_autodetected = (
+                not bool(config["default_destination"]) and is_git_repo()
+            )
             destination = get_destination()
         except GitError as error:
             click.secho(f"Error: {error}", fg="red", err=True)
@@ -1263,7 +1267,7 @@ def fetch(
             if bool(config["auto_stage_enabled"]) and relative_screenshots:
                 stage_screenshots(relative_screenshots, git_root)
 
-    if relative_screenshots:
+    if destination_was_git_autodetected and relative_screenshots:
         print_formatted_path(output_format, relative_screenshots, relative_to_repo=True)
     else:
         print_formatted_path(output_format, copied_screenshots, relative_to_repo=False)
@@ -2209,12 +2213,12 @@ def get_destination() -> Path:
         GitError: If inside a Git repo and git root cannot be determined.
         SecurityError: If inside a Git repo and directory creation fails due to security violation.
     """
-    if is_git_repo():
-        return get_git_repo_img_destination()
-
     config = read_config(get_config_file_path_or_exit())
     if config["default_destination"]:
         return Path(config["default_destination"])
+
+    if is_git_repo():
+        return get_git_repo_img_destination()
 
     return Path.cwd()
 

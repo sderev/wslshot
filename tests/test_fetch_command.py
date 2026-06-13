@@ -161,6 +161,147 @@ def test_fetch_with_custom_destination(
     assert str(dest_dir) in result.output
 
 
+@pytest.mark.parametrize(
+    ("output_style", "expected_prefix"),
+    [
+        ("markdown", "]("),
+        ("text", ""),
+        ("html", 'src="'),
+    ],
+)
+def test_fetch_with_explicit_destination_inside_git_root_prints_resolved_path(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    config_file: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    output_style: str,
+    expected_prefix: str,
+) -> None:
+    """Test explicit destination inside a git root prints the resolved path."""
+    repo_root = tmp_path / "home"
+    dest_dir = repo_root / "Images"
+    dest_dir.mkdir(parents=True)
+    create_screenshot(source_dir, "screenshot.png")
+
+    monkeypatch.setattr(cli, "is_git_repo", lambda: True)
+    monkeypatch.setattr(cli, "get_git_root", lambda: repo_root)
+
+    result = runner.invoke(
+        cli.wslshot,
+        [
+            "fetch",
+            "--source",
+            str(source_dir),
+            "--destination",
+            str(dest_dir),
+            "--output-style",
+            output_style,
+        ],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert f"{expected_prefix}{dest_dir}/" in result.output
+    assert "/Images/" not in result.output.replace(str(dest_dir), "")
+
+
+@pytest.mark.parametrize(
+    ("output_style", "expected_prefix"),
+    [
+        ("markdown", "]("),
+        ("text", ""),
+        ("html", 'src="'),
+    ],
+)
+def test_fetch_with_config_destination_inside_git_root_prints_resolved_path(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    config_file: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    output_style: str,
+    expected_prefix: str,
+) -> None:
+    """Test configured destination is honored before git image autodetection."""
+    repo_root = tmp_path / "home"
+    dest_dir = repo_root / "Images"
+    git_dest = repo_root / "assets" / "images"
+    dest_dir.mkdir(parents=True)
+    git_dest.mkdir(parents=True)
+    create_screenshot(source_dir, "screenshot.png")
+
+    config_file.write_text(
+        json.dumps(
+            {
+                "default_source": str(source_dir),
+                "default_destination": str(dest_dir),
+                "auto_stage_enabled": False,
+                "default_output_format": output_style,
+                "default_convert_to": None,
+            }
+        )
+    )
+
+    monkeypatch.setattr(cli, "is_git_repo", lambda: True)
+    monkeypatch.setattr(cli, "get_git_root", lambda: repo_root)
+    monkeypatch.setattr(cli, "get_git_repo_img_destination", lambda: git_dest)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert f"{expected_prefix}{dest_dir}/" in result.output
+    assert "/assets/images/" not in result.output
+    assert len(list(dest_dir.iterdir())) == 1
+    assert len(list(git_dest.iterdir())) == 0
+
+
+def test_fetch_with_git_autodetected_destination_prints_repo_relative_path(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    config_file: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test git image autodetection keeps repo-relative output."""
+    repo_root = tmp_path / "repo"
+    git_dest = repo_root / "assets" / "images"
+    git_dest.mkdir(parents=True)
+    create_screenshot(source_dir, "screenshot.png")
+
+    config_file.write_text(
+        json.dumps(
+            {
+                "default_source": str(source_dir),
+                "default_destination": "",
+                "auto_stage_enabled": False,
+                "default_output_format": "markdown",
+                "default_convert_to": None,
+            }
+        )
+    )
+
+    monkeypatch.setattr(cli, "is_git_repo", lambda: True)
+    monkeypatch.setattr(cli, "get_git_root", lambda: repo_root)
+    monkeypatch.setattr(cli, "get_git_repo_img_destination", lambda: git_dest)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert re.search(r"\]\(/assets/images/[0-9a-f]{32}\.png\)", result.output)
+
+
 def test_fetch_with_count_3(
     runner: CliRunner,
     fake_home: Path,
@@ -1059,14 +1200,14 @@ def test_fetch_skips_staging_when_auto_stage_disabled(
     assert len(git_add_calls) == 0
 
 
-def test_fetch_uses_relative_paths_when_in_git_repo(
+def test_fetch_with_explicit_git_root_destination_uses_resolved_path(
     runner: CliRunner,
     fake_home: Path,
     source_dir: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test uses relative paths when in git repo."""
+    """Test explicit destination inside git root keeps resolved output path."""
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
     dest_dir = repo_root / "images"
@@ -1096,8 +1237,8 @@ def test_fetch_uses_relative_paths_when_in_git_repo(
     )
 
     assert result.exit_code == 0
-    # Relative paths should start with / when in git repo
-    assert re.search(r"\]\(/images/[0-9a-f]{32}\.png\)", result.output)
+    assert str(dest_dir) in result.output
+    assert not re.search(r"\]\(/images/[0-9a-f]{32}\.png\)", result.output)
 
 
 def test_fetch_uses_absolute_paths_when_not_in_git_repo(
