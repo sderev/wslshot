@@ -25,10 +25,11 @@ import sys
 import tempfile
 import uuid
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from stat import S_ISDIR, S_ISLNK, S_ISREG
+from typing import Literal
 
 import click
 from click_default_group import DefaultGroup
@@ -191,6 +192,15 @@ class ConfigFieldSpec:
     prompt: str
     default: object
     normalize: Callable[[object], object]
+
+
+DestinationProvenance = Literal["configured", "git", "cwd"]
+
+
+@dataclass(frozen=True)
+class DestinationResolution:
+    path: Path
+    provenance: DestinationProvenance
 
 
 CONFIG_FIELD_SPECS: dict[str, ConfigFieldSpec] = {
@@ -1112,10 +1122,9 @@ def fetch(
     destination_was_git_autodetected = False
     if destination is None:
         try:
-            destination_was_git_autodetected = (
-                not bool(config["default_destination"]) and is_git_repo()
-            )
-            destination = get_destination()
+            destination_resolution = resolve_destination(config)
+            destination = destination_resolution.path
+            destination_was_git_autodetected = destination_resolution.provenance == "git"
         except GitError as error:
             click.secho(f"Error: {error}", fg="red", err=True)
             sys.exit(1)
@@ -2202,6 +2211,26 @@ def set_default_destination(destination_str: str) -> None:
     _write_config_field("default_destination", destination)
 
 
+def resolve_destination(config: Mapping[str, object]) -> DestinationResolution:
+    """
+    Resolve the destination directory from an already-loaded config.
+
+    Returns:
+        The destination directory and where it came from.
+
+    Raises:
+        GitError: If inside a Git repo and git root cannot be determined.
+        SecurityError: If inside a Git repo and directory creation fails due to security violation.
+    """
+    if config["default_destination"]:
+        return DestinationResolution(Path(str(config["default_destination"])), "configured")
+
+    if is_git_repo():
+        return DestinationResolution(get_git_repo_img_destination(), "git")
+
+    return DestinationResolution(Path.cwd(), "cwd")
+
+
 def get_destination() -> Path:
     """
     Get the destination directory.
@@ -2214,13 +2243,7 @@ def get_destination() -> Path:
         SecurityError: If inside a Git repo and directory creation fails due to security violation.
     """
     config = read_config(get_config_file_path_or_exit())
-    if config["default_destination"]:
-        return Path(config["default_destination"])
-
-    if is_git_repo():
-        return get_git_repo_img_destination()
-
-    return Path.cwd()
+    return resolve_destination(config).path
 
 
 def is_git_repo() -> bool:
