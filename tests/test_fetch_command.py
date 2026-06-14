@@ -302,6 +302,150 @@ def test_fetch_with_git_autodetected_destination_prints_repo_relative_path(
     assert re.search(r"\]\(/assets/images/[0-9a-f]{32}\.png\)", result.output)
 
 
+def test_fetch_with_git_autodetected_destination_and_convert_to_prints_repo_relative_path(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    config_file: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test git image autodetection keeps repo-relative output after conversion."""
+    repo_root = tmp_path / "repo"
+    git_dest = repo_root / "assets" / "images"
+    git_dest.mkdir(parents=True)
+    create_screenshot(source_dir, "screenshot.png")
+
+    monkeypatch.setattr(cli, "is_git_repo", lambda: True)
+    monkeypatch.setattr(cli, "get_git_root", lambda: repo_root)
+    monkeypatch.setattr(cli, "get_git_repo_img_destination", lambda: git_dest)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--convert-to", "jpg"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert re.search(r"\]\(/assets/images/[0-9a-f]{32}\.jpg\)", result.output)
+    assert str(git_dest) not in result.output
+    assert len(list(git_dest.glob("*.jpg"))) == 1
+    assert len(list(git_dest.glob("*.png"))) == 0
+
+
+def test_fetch_with_git_autodetected_destination_and_config_convert_to_prints_repo_relative_path(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    config_file: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test git image autodetection keeps repo-relative output with config conversion."""
+    repo_root = tmp_path / "repo"
+    git_dest = repo_root / "assets" / "images"
+    git_dest.mkdir(parents=True)
+    create_screenshot(source_dir, "screenshot.png")
+
+    config_file.write_text(
+        json.dumps(
+            {
+                "default_source": "",
+                "default_destination": "",
+                "auto_stage_enabled": False,
+                "default_output_format": "markdown",
+                "default_convert_to": "webp",
+            }
+        )
+    )
+
+    monkeypatch.setattr(cli, "is_git_repo", lambda: True)
+    monkeypatch.setattr(cli, "get_git_root", lambda: repo_root)
+    monkeypatch.setattr(cli, "get_git_repo_img_destination", lambda: git_dest)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert re.search(r"\]\(/assets/images/[0-9a-f]{32}\.webp\)", result.output)
+    assert str(git_dest) not in result.output
+    assert len(list(git_dest.glob("*.webp"))) == 1
+    assert len(list(git_dest.glob("*.png"))) == 0
+
+
+def test_fetch_with_git_autodetected_destination_and_optimize_prints_repo_relative_path(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    config_file: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test git image autodetection keeps repo-relative output after optimization."""
+    repo_root = tmp_path / "repo"
+    git_dest = repo_root / "assets" / "images"
+    git_dest.mkdir(parents=True)
+    create_screenshot(source_dir, "screenshot.png")
+
+    monkeypatch.setattr(cli, "is_git_repo", lambda: True)
+    monkeypatch.setattr(cli, "get_git_root", lambda: repo_root)
+    monkeypatch.setattr(cli, "get_git_repo_img_destination", lambda: git_dest)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir), "--optimize"],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert re.search(r"\]\(/assets/images/[0-9a-f]{32}\.png\)", result.output)
+    assert str(git_dest) not in result.output
+    assert len(list(git_dest.glob("*.png"))) == 1
+
+
+def test_fetch_resolves_destination_from_loaded_config_once(
+    runner: CliRunner,
+    fake_home: Path,
+    source_dir: Path,
+    config_file: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test fetch does not reread config while resolving destination provenance."""
+    repo_root = tmp_path / "repo"
+    git_dest = repo_root / "assets" / "images"
+    git_dest.mkdir(parents=True)
+    create_screenshot(source_dir, "screenshot.png")
+
+    real_read_config = cli.read_config
+    read_count = 0
+
+    def read_config_once(*args, **kwargs):
+        nonlocal read_count
+        read_count += 1
+        if read_count > 1:
+            pytest.fail("fetch should resolve destination from the loaded config")
+        return real_read_config(*args, **kwargs)
+
+    monkeypatch.setattr(cli, "read_config", read_config_once)
+    monkeypatch.setattr(cli, "is_git_repo", lambda: True)
+    monkeypatch.setattr(cli, "get_git_root", lambda: repo_root)
+    monkeypatch.setattr(cli, "get_git_repo_img_destination", lambda: git_dest)
+
+    result = runner.invoke(
+        cli.wslshot,
+        ["fetch", "--source", str(source_dir)],
+        env={"HOME": str(fake_home)},
+    )
+
+    assert result.exit_code == 0
+    assert read_count == 1
+    assert re.search(r"\]\(/assets/images/[0-9a-f]{32}\.png\)", result.output)
+
+
 def test_fetch_with_count_3(
     runner: CliRunner,
     fake_home: Path,
