@@ -8,6 +8,18 @@ For versions ≤0.0.12, see [GitHub Releases](https://github.com/sderev/wslshot/
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.1.2'></a>
+## 0.1.2 - 2026-06-17
+
+Security
+--------
+* Updated `Pillow` minimum version to `12.1.1` and refreshed `uv.lock` to address `GHSA-cfh3-3jmp-rvhc` (`CVE-2026-25990`).
+
+Fixed
+-----
+* Honored configured screenshot destinations before git image directory autodetection.
+* Printed resolved destination paths for explicit or configured destinations instead of rewriting them to repo-relative links.
+
 <a id='changelog-0.1.1'></a>
 ## 0.1.1 - 2026-02-06
 
