@@ -13,7 +13,7 @@ requires-python = ">=3.10"
 dependencies = [
     "click>=8.3.0",
     "click-default-group>=1.2.4",
-    "Pillow>=12.1.1",
+    "Pillow>=12.3.0",
 ]
 
 [dependency-groups]
@@ -21,8 +21,8 @@ dev = [
     "pytest>=8.0.0",
     "scriv[toml]>=1.5.0",
     # urllib3 is a transitive dependency of scriv (via requests).
-    # Pinned to fix CVE-2026-21441 (decompression bomb in streaming API).
-    "urllib3>=2.6.3",
+    # Require the patched release for current urllib3 security advisories.
+    "urllib3>=2.8.0",
 ]
 
 [project.urls]

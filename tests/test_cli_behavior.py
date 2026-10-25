@@ -56,7 +56,6 @@ def test_stage_screenshots_uses_repo_root(monkeypatch: pytest.MonkeyPatch, tmp_p
     def fake_run(cmd, check, cwd):
         received.append(Path(cwd))
         assert cmd[:2] == ["git", "add"]
-        return None
 
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
 

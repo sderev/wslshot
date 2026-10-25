@@ -73,11 +73,13 @@ def test_get_git_root_returns_correct_absolute_path(monkeypatch: pytest.MonkeyPa
     """Test get_git_root() returns the correct absolute path."""
     fake_root = "/home/user/projects/myrepo"
 
-    def fake_run(cmd, check, stdout, stderr):
+    def fake_run(cmd, check, capture_output):
+        assert check is True
+        assert capture_output is True
         """Mock subprocess.run to return git root path."""
         if cmd == ["git", "rev-parse", "--show-toplevel"]:
             result = CompletedProcess(cmd, 0)
-            result.stdout = f"{fake_root}\n".encode("utf-8")
+            result.stdout = f"{fake_root}\n".encode()
             return result
         raise CalledProcessError(1, cmd)
 
@@ -93,12 +95,14 @@ def test_get_git_root_handles_trailing_newline(monkeypatch: pytest.MonkeyPatch) 
     """Test get_git_root() handles git command output with trailing newline."""
     fake_root = "/tmp/testrepo"
 
-    def fake_run(cmd, check, stdout, stderr):
+    def fake_run(cmd, check, capture_output):
+        assert check is True
+        assert capture_output is True
         """Mock subprocess.run with trailing newline in output."""
         if cmd == ["git", "rev-parse", "--show-toplevel"]:
             result = CompletedProcess(cmd, 0)
             # Simulate git output with newline
-            result.stdout = f"{fake_root}\n".encode("utf-8")
+            result.stdout = f"{fake_root}\n".encode()
             return result
         raise CalledProcessError(1, cmd)
 
@@ -114,7 +118,9 @@ def test_get_git_root_handles_trailing_newline(monkeypatch: pytest.MonkeyPatch) 
 def test_get_git_root_raises_git_error_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test get_git_root() raises GitError when git command fails."""
 
-    def fake_run(cmd, check, stdout, stderr):
+    def fake_run(cmd, check, capture_output):
+        assert check is True
+        assert capture_output is True
         """Mock subprocess.run to raise CalledProcessError."""
         raise CalledProcessError(128, cmd)
 
@@ -127,7 +133,9 @@ def test_get_git_root_raises_git_error_on_failure(monkeypatch: pytest.MonkeyPatc
 def test_get_git_root_error_message_is_informative(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test get_git_root() raises GitError with informative error message."""
 
-    def fake_run(cmd, check, stdout, stderr):
+    def fake_run(cmd, check, capture_output):
+        assert check is True
+        assert capture_output is True
         """Mock subprocess.run to raise CalledProcessError."""
         raise CalledProcessError(128, cmd)
 

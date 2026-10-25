@@ -256,7 +256,7 @@ def _is_interactive_terminal() -> bool:
     """
     try:
         return bool(getattr(sys.stdin, "isatty", lambda: False)())
-    except Exception:
+    except Exception:  # noqa: BLE001 - Any stdin probe failure must disable prompting.
         return False
 
 
@@ -606,12 +606,15 @@ def create_directory_safely(
 
         # Perform ownership validation for directories we created or the final target
         # Skip ownership check for pre-existing system directories (e.g., /tmp, /home)
-        if can_check_ownership and (component in created_dirs or component == directory):
-            if stat_info.st_uid != os.getuid():
-                raise SecurityError(
-                    f"Directory owned by different user (UID {stat_info.st_uid}): "
-                    f"{sanitize_path_for_error(component)}"
-                )
+        if (
+            can_check_ownership
+            and (component in created_dirs or component == directory)
+            and stat_info.st_uid != os.getuid()
+        ):
+            raise SecurityError(
+                f"Directory owned by different user (UID {stat_info.st_uid}): "
+                f"{sanitize_path_for_error(component)}"
+            )
 
         # For the final target directory only, optionally fix unsafe permissions
         if harden_permissions and component == directory:
@@ -901,10 +904,11 @@ def suggest_format(invalid_format: str, valid_formats: list[str]) -> str:
     # Simple similarity check
     suggestions = []
     for fmt in valid_formats:
-        if invalid_lower in fmt or fmt in invalid_lower:
-            suggestions.append(fmt)
-        elif len(invalid_lower) > 2 and any(
-            invalid_lower[i : i + 2] in fmt for i in range(len(invalid_lower) - 1)
+        if (
+            invalid_lower in fmt
+            or fmt in invalid_lower
+            or len(invalid_lower) > 2
+            and any(invalid_lower[i : i + 2] in fmt for i in range(len(invalid_lower) - 1))
         ):
             suggestions.append(fmt)
 
@@ -2277,8 +2281,7 @@ def get_git_root() -> Path:
         git_root_bytes = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
         ).stdout
     except FileNotFoundError as error:
         raise GitError("Git executable not found.") from error

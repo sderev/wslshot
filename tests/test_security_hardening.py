@@ -593,7 +593,6 @@ class TestToctouProtection:
         def race_chmod(self_path, mode, *, follow_symlinks=True):
             if not follow_symlinks:
                 raise NotImplementedError("chmod: follow_symlinks unavailable on this platform")
-            return None
 
         monkeypatch.setattr(type(insecure_dir), "chmod", race_chmod)
 
