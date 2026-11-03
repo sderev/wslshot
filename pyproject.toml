@@ -9,11 +9,11 @@ description = "Copy Windows screenshots into WSL for easy reuse."
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{ name = "Sébastien De Revière" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "click>=8.3.0",
     "click-default-group>=1.2.4",
-    "Pillow>=12.3.0",
+    "Pillow>=13.0.0",
 ]
 
 [dependency-groups]

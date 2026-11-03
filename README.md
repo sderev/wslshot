@@ -61,7 +61,7 @@ The agent will run `wslshot -n 1 --no-transfer` and inspect it.
 
 ## Installation
 
-Ensure you have Python 3.10 or later installed on your system.
+Ensure you have Python 3.11 or later installed on your system.
 
 ### Install with `pip`
 
